@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin - Lista de Presentes</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="h4 mb-0">Admin - Presentes</h1>
+      <button id="logoutBtn" class="btn btn-outline-secondary btn-sm d-none">Sair</button>
+    </div>
+
+    <!-- Login -->
+    <div id="loginCard" class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h6">Login</h2>
+        <div class="row g-2">
+          <div class="col-md-5">
+            <input id="email" class="form-control" placeholder="Email" />
+          </div>
+          <div class="col-md-5">
+            <input id="password" class="form-control" type="password" placeholder="Senha" />
+          </div>
+          <div class="col-md-2 d-grid">
+            <button id="loginBtn" class="btn btn-primary">Entrar</button>
+          </div>
+        </div>
+        <div id="loginMsg" class="small text-muted mt-2"></div>
+      </div>
+    </div>
+
+    <!-- Admin -->
+    <div id="adminArea" class="d-none">
+      <div class="row g-3 mt-1">
+        <div class="col-lg-5">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <h2 class="h6">Novo/Editar Presente</h2>
+
+              <input type="hidden" id="giftId">
+
+              <div class="mb-2">
+                <label class="form-label">Título</label>
+                <input id="title" class="form-control" placeholder="Ex: Fralda P" />
+              </div>
+
+              <div class="mb-2">
+                <label class="form-label">Descrição</label>
+                <textarea id="description" class="form-control" rows="2"></textarea>
+              </div>
+
+              <div class="mb-2">
+                <label class="form-label">Imagem (URL)</label>
+                <input id="image_url" class="form-control" placeholder="https://..." />
+              </div>
+
+              <div class="mb-2">
+                <label class="form-label">Link compra (URL)</label>
+                <input id="buy_url" class="form-control" placeholder="https://..." />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">Quantidade total</label>
+                <input id="qty_total" class="form-control" type="number" min="1" value="1" />
+              </div>
+
+              <div class="d-flex gap-2">
+                <button id="saveGiftBtn" class="btn btn-primary">Salvar</button>
+                <button id="clearBtn" class="btn btn-outline-secondary">Limpar</button>
+              </div>
+
+              <div id="adminMsg" class="small text-muted mt-2"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-7">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center">
+                <h2 class="h6 mb-0">Presentes</h2>
+                <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Atualizar</button>
+              </div>
+
+              <div class="table-responsive mt-3">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Título</th>
+                      <th>Total</th>
+                      <th>Reservado</th>
+                      <th>Disponível</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="giftsTbody"></tbody>
+                </table>
+              </div>
+
+              <hr />
+
+              <h3 class="h6">Reservas (para correção)</h3>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Presente</th>
+                      <th>Nome</th>
+                      <th>Qtd</th>
+                      <th>Data</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="resTbody"></tbody>
+                </table>
+              </div>
+
+              <div id="resMsg" class="small text-muted"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- supabase-js via ESM CDN -->
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
+    const SUPABASE_ANON_KEY = "SUA_ANON_KEY";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const loginCard = document.getElementById("loginCard");
+    const adminArea = document.getElementById("adminArea");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    const email = document.getElementById("email");
+    const password = document.getElementById("password");
+    const loginBtn = document.getElementById("loginBtn");
+    const loginMsg = document.getElementById("loginMsg");
+
+    const giftId = document.getElementById("giftId");
+    const title = document.getElementById("title");
+    const description = document.getElementById("description");
+    const image_url = document.getElementById("image_url");
+    const buy_url = document.getElementById("buy_url");
+    const qty_total = document.getElementById("qty_total");
+    const saveGiftBtn = document.getElementById("saveGiftBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const adminMsg = document.getElementById("adminMsg");
+
+    const giftsTbody = document.getElementById("giftsTbody");
+    const resTbody = document.getElementById("resTbody");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const resMsg = document.getElementById("resMsg");
+
+    function setLoggedIn(logged) {
+      loginCard.classList.toggle("d-none", logged);
+      adminArea.classList.toggle("d-none", !logged);
+      logoutBtn.classList.toggle("d-none", !logged);
+    }
+
+    function clearForm() {
+      giftId.value = "";
+      title.value = "";
+      description.value = "";
+      image_url.value = "";
+      buy_url.value = "";
+      qty_total.value = 1;
+      adminMsg.textContent = "";
+    }
+
+    async function loadAdminData() {
+      // gifts_view
+      const { data: gifts, error: eg } = await supabase
+        .from("gifts_view")
+        .select("id,title,qty_total,qty_reserved,qty_available")
+        .order("id", { ascending: true });
+
+      if (eg) throw eg;
+
+      giftsTbody.innerHTML = gifts.map(g => `
+        <tr>
+          <td>${g.id}</td>
+          <td>${g.title}</td>
+          <td>${g.qty_total}</td>
+          <td>${g.qty_reserved}</td>
+          <td>${g.qty_available}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-secondary" data-edit="${g.id}">Editar</button>
+          </td>
+        </tr>
+      `).join("");
+
+      giftsTbody.querySelectorAll("button[data-edit]").forEach(btn => {
+        btn.onclick = async () => {
+          const id = Number(btn.getAttribute("data-edit"));
+          const { data, error } = await supabase.from("gifts").select("*").eq("id", id).single();
+          if (error) return;
+          giftId.value = data.id;
+          title.value = data.title ?? "";
+          description.value = data.description ?? "";
+          image_url.value = data.image_url ?? "";
+          buy_url.value = data.buy_url ?? "";
+          qty_total.value = data.qty_total ?? 1;
+          adminMsg.textContent = `Editando presente #${data.id}`;
+        };
+      });
+
+      // reservas
+      const { data: res, error: er } = await supabase
+        .from("gift_reservations")
+        .select("id,gift_id,reserved_by,qty,reserved_at,gifts(title)")
+        .order("reserved_at", { ascending: false })
+        .limit(200);
+
+      if (er) throw er;
+
+      resTbody.innerHTML = res.map(r => `
+        <tr>
+          <td>${r.gifts?.title ?? ("#" + r.gift_id)}</td>
+          <td>${r.reserved_by}</td>
+          <td>${r.qty}</td>
+          <td>${new Date(r.reserved_at).toLocaleString("pt-BR")}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-danger" data-del="${r.id}">Remover</button>
+          </td>
+        </tr>
+      `).join("");
+
+      resTbody.querySelectorAll("button[data-del]").forEach(btn => {
+        btn.onclick = async () => {
+          const id = Number(btn.getAttribute("data-del"));
+          if (!confirm("Remover esta reserva?")) return;
+          const { error } = await supabase.from("gift_reservations").delete().eq("id", id);
+          if (error) {
+            resMsg.textContent = "Erro ao remover: " + error.message;
+          } else {
+            resMsg.textContent = "Reserva removida.";
+            await loadAdminData();
+          }
+        };
+      });
+
+      resMsg.textContent = `Mostrando até 200 reservas recentes.`;
+    }
+
+    loginBtn.onclick = async () => {
+      loginMsg.textContent = "Entrando...";
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.value.trim(),
+        password: password.value
+      });
+      if (error) {
+        loginMsg.textContent = "Erro: " + error.message;
+      } else {
+        loginMsg.textContent = "";
+      }
+    };
+
+    logoutBtn.onclick = async () => {
+      await supabase.auth.signOut();
+      setLoggedIn(false);
+      clearForm();
+    };
+
+    saveGiftBtn.onclick = async () => {
+      adminMsg.textContent = "Salvando...";
+      const payload = {
+        title: title.value.trim(),
+        description: description.value.trim() || null,
+        image_url: image_url.value.trim() || null,
+        buy_url: buy_url.value.trim() || null,
+        qty_total: Number(qty_total.value || 1)
+      };
+
+      if (!payload.title) {
+        adminMsg.textContent = "Informe o título.";
+        return;
+      }
+
+      if (giftId.value) {
+        const { error } = await supabase.from("gifts").update(payload).eq("id", Number(giftId.value));
+        adminMsg.textContent = error ? ("Erro: " + error.message) : "Atualizado.";
+      } else {
+        const { error } = await supabase.from("gifts").insert(payload);
+        adminMsg.textContent = error ? ("Erro: " + error.message) : "Criado.";
+      }
+
+      await loadAdminData();
+    };
+
+    clearBtn.onclick = clearForm;
+    refreshBtn.onclick = loadAdminData;
+
+    // on load: checa sessão
+    const { data: { session } } = await supabase.auth.getSession();
+    setLoggedIn(!!session);
+
+    supabase.auth.onAuthStateChange(async (_event, session2) => {
+      setLoggedIn(!!session2);
+      if (session2) await loadAdminData();
+    });
+
+    if (session) await loadAdminData();
+  </script>
+</body>
+</html>
