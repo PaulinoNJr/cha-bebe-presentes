@@ -1,17 +1,52 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin - Lista de Presentes</title>
+  <title>Admin - Cha da Melissa (Mel)</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --mel-bg: #fff9ef;
+      --mel-accent: #f0a500;
+      --mel-accent-dark: #c78200;
+    }
+    body {
+      background:
+        radial-gradient(circle at top right, #fff4da 0%, transparent 45%),
+        radial-gradient(circle at bottom left, #ffe8bc 0%, transparent 42%),
+        var(--mel-bg);
+    }
+    h1 { color: #8f5b00; }
+    .card { border: 1px solid #f4d79e; }
+    .btn-primary {
+      background-color: var(--mel-accent);
+      border-color: var(--mel-accent);
+    }
+    .btn-primary:hover {
+      background-color: var(--mel-accent-dark);
+      border-color: var(--mel-accent-dark);
+    }
+    .btn-outline-primary {
+      color: #8f5b00;
+      border-color: #dbad4d;
+    }
+    .btn-outline-primary:hover {
+      color: #fff;
+      background: #c28718;
+      border-color: #c28718;
+    }
+  </style>
 </head>
 <body class="bg-light">
   <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h1 class="h4 mb-0">Admin - Presentes</h1>
-      <button id="logoutBtn" class="btn btn-outline-secondary btn-sm d-none">Sair</button>
+      <h1 class="h4 mb-0">Admin - Cha da Melissa (Mel)</h1>
+      <div class="d-flex gap-2">
+        <a href="./index.html" class="btn btn-outline-primary btn-sm">Ver lista</a>
+        <button id="logoutBtn" class="btn btn-outline-secondary btn-sm d-none">Sair</button>
+      </div>
     </div>
 
     <!-- Login -->
@@ -44,12 +79,12 @@
               <input type="hidden" id="giftId">
 
               <div class="mb-2">
-                <label class="form-label">Título</label>
+                <label class="form-label">TÃ­tulo</label>
                 <input id="title" class="form-control" placeholder="Ex: Fralda P" />
               </div>
 
               <div class="mb-2">
-                <label class="form-label">Descrição</label>
+                <label class="form-label">DescriÃ§Ã£o</label>
                 <textarea id="description" class="form-control" rows="2"></textarea>
               </div>
 
@@ -91,10 +126,10 @@
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>Título</th>
+                      <th>TÃ­tulo</th>
                       <th>Total</th>
                       <th>Reservado</th>
-                      <th>Disponível</th>
+                      <th>DisponÃ­vel</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -104,7 +139,7 @@
 
               <hr />
 
-              <h3 class="h6">Reservas (para correção)</h3>
+              <h3 class="h6">Reservas (para correÃ§Ã£o)</h3>
               <div class="table-responsive">
                 <table class="table table-sm align-middle">
                   <thead>
@@ -267,7 +302,7 @@
         };
       });
 
-      resMsg.textContent = `Mostrando até 200 reservas recentes.`;
+      resMsg.textContent = `Mostrando atÃ© 200 reservas recentes.`;
     }
 
     loginBtn.onclick = async () => {
@@ -300,7 +335,7 @@
       };
 
       if (!payload.title) {
-        adminMsg.textContent = "Informe o título.";
+        adminMsg.textContent = "Informe o tÃ­tulo.";
         return;
       }
 
@@ -318,7 +353,7 @@
     clearBtn.onclick = clearForm;
     refreshBtn.onclick = loadAdminData;
 
-    // on load: checa sessão
+    // on load: checa sessÃ£o
     const { data: { session } } = await supabase.auth.getSession();
     setLoggedIn(!!session);
 
@@ -331,3 +366,5 @@
   </script>
 </body>
 </html>
+
+
