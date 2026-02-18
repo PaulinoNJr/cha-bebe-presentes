@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Lista de Presentes - Cha da Melissa (Mel)</title>
+  <title>Lista de Presentes - Chá da Melissa (Mel)</title>
 
   <!-- Bootswatch (Bootstrap 5) - Minty -->
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
@@ -54,8 +54,8 @@
   <div class="sticky-actions border-bottom">
     <div class="container py-3 d-flex flex-wrap gap-2 align-items-center justify-content-between">
       <div>
-        <h1 class="h4 mb-1">Cha da Melissa (Mel)</h1>
-        <div class="text-muted small">Escolha um item, informe seu nome e quantidade. Reservas ficam pÃºblicas.</div>
+        <h1 class="h4 mb-1">Chá da Melissa (Mel)</h1>
+        <div class="text-muted small">Escolha um item, informe seu nome e quantidade. Reservas ficam públicas.</div>
       </div>
       <div class="d-flex gap-2">
         <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Atualizar</button>
@@ -68,7 +68,7 @@
     <div id="status" class="alert alert-secondary py-2 small">Carregando...</div>
     <div id="grid" class="row g-3"></div>
     <div class="text-muted small mt-3">
-      Dica: se a quantidade acabar enquanto vocÃª reserva, o sistema bloqueia automaticamente.
+      Dica: se a quantidade acabar enquanto você reserva, o sistema bloqueia automaticamente.
     </div>
   </div>
 
@@ -150,7 +150,7 @@
     if (missingConfig) {
       status.className = "alert alert-danger py-2 small";
       status.innerHTML = 'Configure <code>supabase-config.js</code> com <code>url</code> e <code>anonKey</code> do Supabase.';
-      throw new Error("Supabase nao configurado.");
+      throw new Error("Supabase não configurado.");
     }
 
     const modalEl = document.getElementById("reserveModal");
@@ -200,7 +200,7 @@
 
       const badge = isFull
         ? `<span class="badge text-bg-danger">Esgotado</span>`
-        : `<span class="badge text-bg-success">DisponÃ­vel: ${g.qty_available} / ${g.qty_total}</span>`;
+        : `<span class="badge text-bg-success">Disponível: ${g.qty_available} / ${g.qty_total}</span>`;
 
       const res = reservationsForGift(g.id);
       const resHtml = res.length
@@ -247,7 +247,7 @@
       const total = gifts.length;
       const full = gifts.filter(g => g.qty_available <= 0).length;
       status.className = "alert alert-light border py-2 small";
-      status.textContent = `Itens: ${total} | DisponÃ­veis: ${total - full} | Esgotados: ${full}`;
+      status.textContent = `Itens: ${total} | Disponíveis: ${total - full} | Esgotados: ${full}`;
 
       grid.innerHTML = gifts.map(giftCard).join("");
 
@@ -276,7 +276,7 @@
         opt.textContent = String(i);
         qtySelect.appendChild(opt);
       }
-      qtyHelp.textContent = `DisponÃ­vel agora: ${gift.qty_available} de ${gift.qty_total}.`;
+      qtyHelp.textContent = `Disponível agora: ${gift.qty_available} de ${gift.qty_total}.`;
 
       confirmBtn.disabled = (max <= 0);
       reserveModal.show();
@@ -297,13 +297,13 @@
       const name = nameInput.value.trim();
       const qty = Number(qtySelect.value);
 
-      // proteÃ§Ã£o mÃ­nima no front
+      // proteção mínima no front
       if (name.length < 3 || !name.includes(" ")) {
         setModalAlert("warning", "Informe nome e sobrenome (ex: Ana Souza).");
         return;
       }
       if (!Number.isFinite(qty) || qty <= 0) {
-        setModalAlert("warning", "Escolha uma quantidade vÃ¡lida.");
+        setModalAlert("warning", "Escolha uma quantidade válida.");
         return;
       }
 
@@ -317,9 +317,9 @@
         setTimeout(() => reserveModal.hide(), 650);
       } catch (e) {
         const msg = String(e.message || "");
-        if (msg.includes("NOT_ENOUGH_QTY")) setModalAlert("danger", "Quantidade insuficiente (alguÃ©m reservou antes). Atualize e tente novamente.");
-        else if (msg.includes("INVALID_NAME")) setModalAlert("danger", "Nome invÃ¡lido.");
-        else if (msg.includes("INVALID_QTY")) setModalAlert("danger", "Quantidade invÃ¡lida.");
+        if (msg.includes("NOT_ENOUGH_QTY")) setModalAlert("danger", "Quantidade insuficiente (alguém reservou antes). Atualize e tente novamente.");
+        else if (msg.includes("INVALID_NAME")) setModalAlert("danger", "Nome inválido.");
+        else if (msg.includes("INVALID_QTY")) setModalAlert("danger", "Quantidade inválida.");
         else setModalAlert("danger", `Erro: ${msg}`);
       } finally {
         confirmBtn.disabled = false;

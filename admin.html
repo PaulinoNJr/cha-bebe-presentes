@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin - Cha da Melissa (Mel)</title>
+  <title>Admin - Chá da Melissa (Mel)</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
   <style>
@@ -42,7 +42,7 @@
 <body class="bg-light">
   <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h1 class="h4 mb-0">Admin - Cha da Melissa (Mel)</h1>
+      <h1 class="h4 mb-0">Admin - Chá da Melissa (Mel)</h1>
       <div class="d-flex gap-2">
         <a href="./index.html" class="btn btn-outline-primary btn-sm">Ver lista</a>
         <button id="logoutBtn" class="btn btn-outline-secondary btn-sm d-none">Sair</button>
@@ -79,12 +79,12 @@
               <input type="hidden" id="giftId">
 
               <div class="mb-2">
-                <label class="form-label">TÃ­tulo</label>
+                <label class="form-label">Título</label>
                 <input id="title" class="form-control" placeholder="Ex: Fralda P" />
               </div>
 
               <div class="mb-2">
-                <label class="form-label">DescriÃ§Ã£o</label>
+                <label class="form-label">Descrição</label>
                 <textarea id="description" class="form-control" rows="2"></textarea>
               </div>
 
@@ -126,10 +126,10 @@
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>TÃ­tulo</th>
+                      <th>Título</th>
                       <th>Total</th>
                       <th>Reservado</th>
-                      <th>DisponÃ­vel</th>
+                      <th>Disponível</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -139,7 +139,7 @@
 
               <hr />
 
-              <h3 class="h6">Reservas (para correÃ§Ã£o)</h3>
+              <h3 class="h6">Reservas (para correção)</h3>
               <div class="table-responsive">
                 <table class="table table-sm align-middle">
                   <thead>
@@ -185,7 +185,7 @@
         "afterbegin",
         `<div class="container pt-3"><div class="alert alert-danger mb-0">Configure <code>supabase-config.js</code> com <code>url</code> e <code>anonKey</code> do Supabase.</div></div>`
       );
-      throw new Error("Supabase nao configurado.");
+      throw new Error("Supabase não configurado.");
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -213,26 +213,13 @@
     const resTbody = document.getElementById("resTbody");
     const refreshBtn = document.getElementById("refreshBtn");
     const resMsg = document.getElementById("resMsg");
-    const REQUEST_TIMEOUT_MS = 15000;
 
     function formatError(err) {
       const msg = String(err?.message || err || "Erro inesperado");
       if (msg.includes("row-level security")) {
-        return "Permissao negada (RLS). Verifique se seu email esta em admin_emails.";
-      }
-      if (msg.includes("timeout")) {
-        return "Timeout ao falar com Supabase. Verifique URL/chave/rede.";
+        return "Permissão negada (RLS). Verifique se seu email está em admin_emails.";
       }
       return msg;
-    }
-
-    function withTimeout(promise, label = "Operacao") {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) => {
-          setTimeout(() => reject(new Error(`${label} timeout`)), REQUEST_TIMEOUT_MS);
-        }),
-      ]);
     }
 
     function setLoggedIn(logged) {
@@ -323,20 +310,17 @@
         };
       });
 
-      resMsg.textContent = `Mostrando atÃ© 200 reservas recentes.`;
+      resMsg.textContent = `Mostrando até 200 reservas recentes.`;
     }
 
     loginBtn.onclick = async () => {
       loginBtn.disabled = true;
       loginMsg.textContent = "Entrando...";
       try {
-        const { error } = await withTimeout(
-          supabase.auth.signInWithPassword({
-            email: email.value.trim(),
-            password: password.value
-          }),
-          "Login"
-        );
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.value.trim(),
+          password: password.value
+        });
         loginMsg.textContent = error ? ("Erro: " + formatError(error)) : "";
       } catch (e) {
         loginMsg.textContent = "Erro: " + formatError(e);
@@ -363,29 +347,23 @@
       };
 
       if (!payload.title) {
-        adminMsg.textContent = "Informe o titulo.";
+        adminMsg.textContent = "Informe o título.";
         saveGiftBtn.disabled = false;
         return;
       }
       if (!Number.isInteger(payload.qty_total) || payload.qty_total < 1) {
-        adminMsg.textContent = "Quantidade total invalida.";
+        adminMsg.textContent = "Quantidade total inválida.";
         saveGiftBtn.disabled = false;
         return;
       }
 
       try {
         if (giftId.value) {
-          const { error } = await withTimeout(
-            supabase.from("gifts").update(payload).eq("id", Number(giftId.value)),
-            "Update de presente"
-          );
+          const { error } = await supabase.from("gifts").update(payload).eq("id", Number(giftId.value));
           if (error) throw error;
           adminMsg.textContent = "Atualizado.";
         } else {
-          const { error } = await withTimeout(
-            supabase.from("gifts").insert(payload),
-            "Criacao de presente"
-          );
+          const { error } = await supabase.from("gifts").insert(payload);
           if (error) throw error;
           adminMsg.textContent = "Criado.";
         }
@@ -411,7 +389,7 @@
       }
     };
 
-    // on load: checa sessÃ£o
+    // on load: checa sessão
     const { data: { session } } = await supabase.auth.getSession();
     setLoggedIn(!!session);
 
