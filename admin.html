@@ -213,6 +213,27 @@
     const resTbody = document.getElementById("resTbody");
     const refreshBtn = document.getElementById("refreshBtn");
     const resMsg = document.getElementById("resMsg");
+    const REQUEST_TIMEOUT_MS = 15000;
+
+    function formatError(err) {
+      const msg = String(err?.message || err || "Erro inesperado");
+      if (msg.includes("row-level security")) {
+        return "Permissao negada (RLS). Verifique se seu email esta em admin_emails.";
+      }
+      if (msg.includes("timeout")) {
+        return "Timeout ao falar com Supabase. Verifique URL/chave/rede.";
+      }
+      return msg;
+    }
+
+    function withTimeout(promise, label = "Operacao") {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`${label} timeout`)), REQUEST_TIMEOUT_MS);
+        }),
+      ]);
+    }
 
     function setLoggedIn(logged) {
       loginCard.classList.toggle("d-none", logged);
@@ -306,15 +327,21 @@
     }
 
     loginBtn.onclick = async () => {
+      loginBtn.disabled = true;
       loginMsg.textContent = "Entrando...";
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.value.trim(),
-        password: password.value
-      });
-      if (error) {
-        loginMsg.textContent = "Erro: " + error.message;
-      } else {
-        loginMsg.textContent = "";
+      try {
+        const { error } = await withTimeout(
+          supabase.auth.signInWithPassword({
+            email: email.value.trim(),
+            password: password.value
+          }),
+          "Login"
+        );
+        loginMsg.textContent = error ? ("Erro: " + formatError(error)) : "";
+      } catch (e) {
+        loginMsg.textContent = "Erro: " + formatError(e);
+      } finally {
+        loginBtn.disabled = false;
       }
     };
 
@@ -325,6 +352,7 @@
     };
 
     saveGiftBtn.onclick = async () => {
+      saveGiftBtn.disabled = true;
       adminMsg.textContent = "Salvando...";
       const payload = {
         title: title.value.trim(),
@@ -335,23 +363,53 @@
       };
 
       if (!payload.title) {
-        adminMsg.textContent = "Informe o tÃ­tulo.";
+        adminMsg.textContent = "Informe o titulo.";
+        saveGiftBtn.disabled = false;
+        return;
+      }
+      if (!Number.isInteger(payload.qty_total) || payload.qty_total < 1) {
+        adminMsg.textContent = "Quantidade total invalida.";
+        saveGiftBtn.disabled = false;
         return;
       }
 
-      if (giftId.value) {
-        const { error } = await supabase.from("gifts").update(payload).eq("id", Number(giftId.value));
-        adminMsg.textContent = error ? ("Erro: " + error.message) : "Atualizado.";
-      } else {
-        const { error } = await supabase.from("gifts").insert(payload);
-        adminMsg.textContent = error ? ("Erro: " + error.message) : "Criado.";
-      }
+      try {
+        if (giftId.value) {
+          const { error } = await withTimeout(
+            supabase.from("gifts").update(payload).eq("id", Number(giftId.value)),
+            "Update de presente"
+          );
+          if (error) throw error;
+          adminMsg.textContent = "Atualizado.";
+        } else {
+          const { error } = await withTimeout(
+            supabase.from("gifts").insert(payload),
+            "Criacao de presente"
+          );
+          if (error) throw error;
+          adminMsg.textContent = "Criado.";
+        }
 
-      await loadAdminData();
+        try {
+          await loadAdminData();
+        } catch (e) {
+          adminMsg.textContent = "Salvou, mas falhou ao recarregar: " + formatError(e);
+        }
+      } catch (e) {
+        adminMsg.textContent = "Erro ao salvar: " + formatError(e);
+      } finally {
+        saveGiftBtn.disabled = false;
+      }
     };
 
     clearBtn.onclick = clearForm;
-    refreshBtn.onclick = loadAdminData;
+    refreshBtn.onclick = async () => {
+      try {
+        await loadAdminData();
+      } catch (e) {
+        resMsg.textContent = "Erro ao atualizar: " + formatError(e);
+      }
+    };
 
     // on load: checa sessÃ£o
     const { data: { session } } = await supabase.auth.getSession();
@@ -359,10 +417,22 @@
 
     supabase.auth.onAuthStateChange(async (_event, session2) => {
       setLoggedIn(!!session2);
-      if (session2) await loadAdminData();
+      if (session2) {
+        try {
+          await loadAdminData();
+        } catch (e) {
+          resMsg.textContent = "Erro ao carregar dados: " + formatError(e);
+        }
+      }
     });
 
-    if (session) await loadAdminData();
+    if (session) {
+      try {
+        await loadAdminData();
+      } catch (e) {
+        resMsg.textContent = "Erro ao carregar dados: " + formatError(e);
+      }
+    }
   </script>
 </body>
 </html>
