@@ -129,12 +129,29 @@
 
   </div>
 
+  <script src="./supabase-config.js"></script>
+
   <!-- supabase-js via ESM CDN -->
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-    const SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
-    const SUPABASE_ANON_KEY = "SUA_ANON_KEY";
+    const cfg = window.SUPABASE_CONFIG || {};
+    const SUPABASE_URL = cfg.url;
+    const SUPABASE_ANON_KEY = cfg.anonKey;
+
+    const missingConfig =
+      !SUPABASE_URL ||
+      !SUPABASE_ANON_KEY ||
+      SUPABASE_URL.includes("SEU-PROJETO") ||
+      SUPABASE_ANON_KEY.includes("SUA_ANON_KEY");
+
+    if (missingConfig) {
+      document.body.insertAdjacentHTML(
+        "afterbegin",
+        `<div class="container pt-3"><div class="alert alert-danger mb-0">Configure <code>supabase-config.js</code> com <code>url</code> e <code>anonKey</code> do Supabase.</div></div>`
+      );
+      throw new Error("Supabase nao configurado.");
+    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
