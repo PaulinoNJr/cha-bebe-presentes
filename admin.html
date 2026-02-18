@@ -111,7 +111,7 @@
 
               <div class="mb-2">
                 <label class="form-label">Título</label>
-                <input id="title" class="form-control" placeholder="Ex: Fralda P" />
+                <input id="title" class="form-control text-uppercase" placeholder="Ex: FRALDA P" />
               </div>
 
               <div class="mb-2">
@@ -273,6 +273,8 @@
       return msg;
     }
 
+    const upper = (s) => String(s ?? "").trim().toLocaleUpperCase("pt-BR");
+
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
@@ -361,7 +363,7 @@
       giftsTbody.innerHTML = gifts.map(g => `
         <tr>
           <td>${g.id}</td>
-          <td>${g.title}</td>
+          <td>${upper(g.title)}</td>
           <td>${g.classification_name ?? "-"}</td>
           <td>${g.qty_total}</td>
           <td>${g.qty_reserved}</td>
@@ -378,7 +380,7 @@
           const { data, error } = await supabase.from("gifts").select("*").eq("id", id).single();
           if (error) return;
           giftId.value = data.id;
-          title.value = data.title ?? "";
+          title.value = upper(data.title);
           description.value = data.description ?? "";
           image_url.value = data.image_url ?? "";
           buy_url.value = data.buy_url ?? "";
@@ -482,7 +484,7 @@
       const classIdNum = Number(classification_id.value);
       const payload = {
         classification_id: Number.isInteger(classIdNum) && classIdNum > 0 ? classIdNum : null,
-        title: title.value.trim(),
+        title: upper(title.value),
         description: description.value.trim() || null,
         image_url: image_url.value.trim() || null,
         buy_url: buy_url.value.trim() || null,

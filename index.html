@@ -183,6 +183,7 @@
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
+    const upper = (s) => String(s ?? "").toLocaleUpperCase("pt-BR");
 
     function setModalAlert(kind, msg) {
       modalAlert.classList.remove("d-none", "alert-danger", "alert-success", "alert-warning", "alert-info");
@@ -249,7 +250,7 @@
             ${img}
             <div class="card-body d-flex flex-column">
               <div class="d-flex justify-content-between align-items-start gap-2">
-                <h5 class="card-title mb-0">${esc(g.title)}</h5>
+                <h5 class="card-title mb-0">${esc(upper(g.title))}</h5>
                 ${badge}
               </div>
               <div class="small text-muted mt-1">${esc(g.classification_name || "Sem classificação")}</div>
@@ -309,7 +310,7 @@
     function openReserveModal(gift) {
       currentGift = gift;
       clearModalAlert();
-      modalTitle.textContent = `Reservar: ${gift.title}`;
+      modalTitle.textContent = `Reservar: ${upper(gift.title)}`;
       modalDesc.textContent = gift.description || "";
 
       nameInput.value = "";
@@ -358,7 +359,7 @@
 
       try {
         await reserveGift(currentGift.id, name, qty);
-        setModalAlert("success", `Reserva confirmada: ${currentGift.title} (x${qty}) - ${name}`);
+        setModalAlert("success", `Reserva confirmada: ${upper(currentGift.title)} (x${qty}) - ${name}`);
         await loadAll();
         setTimeout(() => reserveModal.hide(), 650);
       } catch (e) {
