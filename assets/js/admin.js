@@ -65,6 +65,9 @@ function formatError(err) {
   if (msg.toLowerCase().includes("email not confirmed")) {
     return "Email nao confirmado no Supabase Auth.";
   }
+  if (msg.toLowerCase().includes("is_active")) {
+    return "Banco desatualizado. Execute o supabase-setup.sql mais recente.";
+  }
   return msg;
 }
 
@@ -177,6 +180,39 @@ function clearForm() {
   adminMsg.textContent = "";
 }
 
+async function clearGiftReservations(giftIdToClear) {
+  const { error } = await supabase
+    .from("gift_reservations")
+    .delete()
+    .eq("gift_id", giftIdToClear);
+  if (error) {
+    throw error;
+  }
+}
+
+async function setGiftActiveState(giftIdToUpdate, isActive) {
+  const { error } = await supabase
+    .from("gifts")
+    .update({ is_active: isActive })
+    .eq("id", giftIdToUpdate);
+  if (error) {
+    throw error;
+  }
+}
+
+async function deactivateGiftAndClearReservations(giftIdToDeactivate) {
+  await setGiftActiveState(giftIdToDeactivate, false);
+  await clearGiftReservations(giftIdToDeactivate);
+}
+
+async function deleteGiftAndClearReservations(giftIdToDelete) {
+  await clearGiftReservations(giftIdToDelete);
+  const { error } = await supabase.from("gifts").delete().eq("id", giftIdToDelete);
+  if (error) {
+    throw error;
+  }
+}
+
 async function loadAdminData() {
   const { data: site, error: es } = await supabase
     .from("site_content")
@@ -201,12 +237,34 @@ async function loadAdminData() {
   renderClassificationOptions();
   renderClassificationTable();
 
-  const { data: gifts, error: eg } = await supabase
+  let gifts = [];
+  let eg = null;
+  const { data: giftsWithActive, error: egWithActive } = await supabase
     .from("gifts_view")
     .select(
-      "id,title,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available"
+      "id,title,price_value,is_active,classification_id,classification_name,qty_total,qty_reserved,qty_available"
     )
     .order("id", { ascending: true });
+
+  if (egWithActive) {
+    const maybeMissingColumn =
+      String(egWithActive?.code || "") === "42703" ||
+      String(egWithActive?.message || "").toLowerCase().includes("is_active");
+
+    if (maybeMissingColumn) {
+      const fallback = await supabase
+        .from("gifts_view")
+        .select("id,title,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available")
+        .order("id", { ascending: true });
+
+      gifts = (fallback.data ?? []).map((g) => ({ ...g, is_active: true }));
+      eg = fallback.error;
+    } else {
+      eg = egWithActive;
+    }
+  } else {
+    gifts = giftsWithActive ?? [];
+  }
 
   if (eg) {
     throw eg;
@@ -220,11 +278,20 @@ async function loadAdminData() {
           <td>${upper(g.title)}</td>
           <td>${g.classification_name ?? "-"}</td>
           <td>${formatBRL(g.price_value, "-")}</td>
+          <td>${g.is_active === false ? '<span class="badge text-bg-secondary">INATIVO</span>' : '<span class="badge text-bg-success">ATIVO</span>'}</td>
           <td>${g.qty_total}</td>
           <td>${g.qty_reserved}</td>
           <td>${g.qty_available}</td>
           <td class="text-end">
-            <button class="btn btn-sm btn-outline-secondary" data-edit="${g.id}">Editar</button>
+            <div class="d-flex gap-1 justify-content-end flex-wrap">
+              <button class="btn btn-sm btn-outline-secondary" data-edit="${g.id}">Editar</button>
+              <button
+                class="btn btn-sm ${g.is_active === false ? "btn-outline-success" : "btn-outline-warning"}"
+                data-toggle-active="${g.id}"
+                data-next-active="${g.is_active === false ? "true" : "false"}"
+              >${g.is_active === false ? "Ativar" : "Desativar"}</button>
+              <button class="btn btn-sm btn-outline-danger" data-delete-gift="${g.id}">Excluir</button>
+            </div>
           </td>
         </tr>
       `
@@ -250,7 +317,65 @@ async function loadAdminData() {
           : String(data.price_value);
       qty_total.value = data.qty_total ?? 1;
       renderClassificationOptions(data.classification_id ?? "");
-      adminMsg.textContent = `Editando presente #${data.id}`;
+      adminMsg.textContent = `Editando presente #${data.id}${data.is_active === false ? " (INATIVO)" : ""}`;
+    };
+  });
+
+  giftsTbody.querySelectorAll("button[data-toggle-active]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-toggle-active"));
+      const nextActive = btn.getAttribute("data-next-active") === "true";
+      const confirmMsg = nextActive
+        ? "Ativar este presente?"
+        : "Desativar este presente e limpar todas as reservas dele?";
+
+      if (!confirm(confirmMsg)) {
+        return;
+      }
+
+      btn.disabled = true;
+      adminMsg.textContent = nextActive
+        ? "Ativando presente..."
+        : "Desativando presente e limpando reservas...";
+
+      try {
+        if (nextActive) {
+          await setGiftActiveState(id, true);
+          adminMsg.textContent = "Presente ativado.";
+        } else {
+          await deactivateGiftAndClearReservations(id);
+          adminMsg.textContent = "Presente desativado e reservas removidas.";
+        }
+        await loadAdminData();
+      } catch (e) {
+        adminMsg.textContent = `Erro ao alterar status: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
+  giftsTbody.querySelectorAll("button[data-delete-gift]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-delete-gift"));
+      if (!confirm("Excluir este presente? As reservas dele tambem serao removidas.")) {
+        return;
+      }
+
+      btn.disabled = true;
+      adminMsg.textContent = "Excluindo presente...";
+      try {
+        await deleteGiftAndClearReservations(id);
+        if (Number(giftId.value || 0) === id) {
+          clearForm();
+        }
+        adminMsg.textContent = "Presente excluido e reservas removidas.";
+        await loadAdminData();
+      } catch (e) {
+        adminMsg.textContent = `Erro ao excluir: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
     };
   });
 

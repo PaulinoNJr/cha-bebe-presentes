@@ -186,9 +186,21 @@ async function loadAll() {
 
   const siteContent = await sbFetch("/rest/v1/site_content?select=instructions_html&id=eq.1&limit=1");
   classifications = await sbFetch("/rest/v1/gift_classifications?select=id,name&order=name.asc");
-  gifts = await sbFetch(
-    "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=id.asc"
-  );
+  let giftsData = [];
+  try {
+    giftsData = await sbFetch(
+      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,is_active,classification_id,classification_name,qty_total,qty_reserved,qty_available&is_active=eq.true&order=id.asc"
+    );
+  } catch (e) {
+    const maybeMissingColumn = String(e?.message || "").toLowerCase().includes("is_active");
+    if (!maybeMissingColumn) {
+      throw e;
+    }
+    giftsData = await sbFetch(
+      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=id.asc"
+    );
+  }
+  gifts = (giftsData ?? []).filter((g) => g.is_active !== false);
   reservations = await sbFetch(
     "/rest/v1/gift_reservations?select=gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc"
   );
@@ -257,6 +269,8 @@ confirmBtn.addEventListener("click", async () => {
     const msg = String(e.message || "");
     if (msg.includes("NOT_ENOUGH_QTY")) {
       setModalAlert("danger", "Quantidade insuficiente (alguem reservou antes). Atualize e tente novamente.");
+    } else if (msg.includes("GIFT_INACTIVE")) {
+      setModalAlert("danger", "Este item foi desativado pela administracao.");
     } else if (msg.includes("INVALID_NAME")) {
       setModalAlert("danger", "Nome invalido.");
     } else if (msg.includes("INVALID_QTY")) {
