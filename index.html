@@ -7,54 +7,141 @@
 
   <!-- Bootswatch (Bootstrap 5) - Minty -->
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/minty/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 
-    <style>
+  <style>
     :root {
-      --mel-bg: #fff9ef;
-      --mel-accent: #f0a500;
-      --mel-accent-dark: #c78200;
+      --mel-bg: #fff8fb;
+      --mel-pink: #ff8db1;
+      --mel-pink-dark: #ef5f8d;
+      --mel-blue: #8ed9ff;
+      --mel-yellow: #ffd875;
+      --mel-text: #634f63;
+      --mel-card: #ffffff;
+      --mel-border: #ffd7e5;
     }
     body {
+      font-family: "Nunito", sans-serif;
+      color: var(--mel-text);
       background:
-        radial-gradient(circle at top right, #fff4da 0%, transparent 45%),
-        radial-gradient(circle at bottom left, #ffe8bc 0%, transparent 42%),
-        var(--mel-bg);
+        radial-gradient(circle at 12% 8%, #ffe5ee 0, #ffe5ee 8%, transparent 9%),
+        radial-gradient(circle at 90% 14%, #e5f7ff 0, #e5f7ff 7%, transparent 8%),
+        radial-gradient(circle at 80% 85%, #fff0c6 0, #fff0c6 10%, transparent 11%),
+        linear-gradient(180deg, #fffafc 0%, #fff6ef 100%);
+      background-attachment: fixed;
+    }
+    .sticky-actions {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 0;
+      background: linear-gradient(95deg, #ffd8e6 0%, #ffeec0 55%, #d9f2ff 100%);
+      box-shadow: 0 8px 24px rgba(146, 115, 146, 0.15);
+    }
+    .sticky-actions .container {
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+    .brand-title {
+      font-family: "Baloo 2", cursive;
+      font-size: clamp(1.5rem, 2vw, 2rem);
+      line-height: 1.05;
+      color: #a65478;
+      margin-bottom: 0.2rem;
+    }
+    .brand-subtitle {
+      color: #7f6980;
+      font-weight: 600;
+      font-size: 0.92rem;
+      max-width: 560px;
+    }
+    .chip-love {
+      display: inline-block;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid #ffd6e4;
+      padding: 0.2rem 0.7rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #a65478;
+      margin-bottom: 0.35rem;
+    }
+    .filter-ribbon {
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid #ffe0ea;
+      border-radius: 16px;
+      padding: 0.7rem 0.85rem;
+      box-shadow: 0 8px 20px rgba(176, 146, 172, 0.12);
     }
     .gift-img {
       width: 100%;
       aspect-ratio: 1 / 1;
-      height: auto;
       max-height: 320px;
       object-fit: contain;
-      background: #fffdf8;
-      padding: 10px;
+      background: linear-gradient(160deg, #fff8f3, #f7fcff);
+      padding: 12px;
+      border-bottom: 1px dashed #f0d9e5;
     }
-    .res-list { max-height: 160px; overflow:auto; }
-    .sticky-actions {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      backdrop-filter: blur(6px);
-      background: linear-gradient(90deg, #fff4d1, #ffefc5);
+    .card {
+      border: 1px solid var(--mel-border);
+      border-radius: 24px;
+      background: var(--mel-card);
+      box-shadow: 0 12px 26px rgba(177, 143, 177, 0.14);
+      overflow: hidden;
     }
-    .sticky-actions h1 { color: #8f5b00; }
-    .card { border: 1px solid #f4d79e; }
+    .card-title {
+      font-family: "Baloo 2", cursive;
+      color: #93476c;
+      letter-spacing: 0.2px;
+    }
+    .list-group-item {
+      border-color: #f9e4ec;
+    }
+    .res-list { max-height: 160px; overflow: auto; border-radius: 12px; }
+    .alert {
+      border-radius: 14px;
+      border: 1px solid #f2dce7;
+    }
+    .btn {
+      border-radius: 14px;
+      font-weight: 700;
+    }
     .btn-primary {
-      background-color: var(--mel-accent);
-      border-color: var(--mel-accent);
+      background: linear-gradient(180deg, var(--mel-pink), var(--mel-pink-dark));
+      border-color: #e85f8b;
+      box-shadow: 0 6px 14px rgba(239, 95, 141, 0.25);
     }
     .btn-primary:hover {
-      background-color: var(--mel-accent-dark);
-      border-color: var(--mel-accent-dark);
+      background: linear-gradient(180deg, #ff78a3, #e25383);
+      border-color: #de4f7d;
     }
     .btn-outline-primary {
-      color: #8f5b00;
-      border-color: #dbad4d;
+      color: #965774;
+      border-color: #eba8c2;
+      background: #fff8fb;
     }
     .btn-outline-primary:hover {
       color: #fff;
-      background: #c28718;
-      border-color: #c28718;
+      background: #e878a1;
+      border-color: #e878a1;
+    }
+    .btn-warning {
+      background: linear-gradient(180deg, #ffe58c, #ffd067);
+      border-color: #f4c85b;
+      color: #7c5b1a;
+    }
+    .btn-warning:hover {
+      background: linear-gradient(180deg, #ffdc74, #fbc650);
+      border-color: #f2bc47;
+      color: #6c4f19;
+    }
+    .badge.text-bg-success {
+      background-color: #8ac25d !important;
+    }
+    .badge.text-bg-danger {
+      background-color: #f16f89 !important;
     }
     .whats-fab {
       position: fixed;
@@ -77,14 +164,24 @@
       background: #1fb85a;
       color: #fff;
     }
+    @media (max-width: 768px) {
+      .sticky-actions .container {
+        padding-top: 0.8rem;
+        padding-bottom: 0.8rem;
+      }
+      .filter-ribbon {
+        padding: 0.65rem 0.75rem;
+      }
+    }
   </style>
 </head>
 <body class="bg-light">
   <div class="sticky-actions border-bottom">
     <div class="container py-3 d-flex flex-wrap gap-2 align-items-center justify-content-between">
       <div>
-        <h1 class="h4 mb-1">Chá da Melissa (Mel)</h1>
-        <div class="text-muted small">Escolha um item, informe seu nome e quantidade. Reservas ficam públicas.</div>
+        <span class="chip-love">Com carinho para a Mel</span>
+        <h1 class="brand-title">Chá da Melissa (Mel)</h1>
+        <div class="brand-subtitle">Escolha um item, informe seu nome e quantidade. Cada gesto de carinho é especial para nossa pequena.</div>
       </div>
       <div class="d-flex gap-2 flex-wrap align-items-center">
         <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Atualizar</button>
@@ -98,7 +195,7 @@
   </div>
 
   <div class="container py-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 filter-ribbon">
       <label for="classFilter" class="small text-muted mb-0">Filtrar por categoria:</label>
       <select id="classFilter" class="form-select form-select-sm" style="max-width: 320px;">
         <option value="">Todas as classificações</option>
