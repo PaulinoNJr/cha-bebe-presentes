@@ -188,7 +188,14 @@
       throw new Error("Supabase não configurado.");
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Workaround para lock do navegador em alguns ambientes (Vercel/browser)
+    const noOpLock = async (_name, _timeout, fn) => await fn();
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        lock: noOpLock,
+      },
+    });
 
     const loginCard = document.getElementById("loginCard");
     const adminArea = document.getElementById("adminArea");
@@ -337,15 +344,7 @@
           loginMsg.textContent = "Erro: " + formatError(error);
           return;
         }
-
-        const isAdmin = await ensureAdminPermission();
-        if (!isAdmin) {
-          await supabase.auth.signOut();
-          loginMsg.textContent = "Login OK, mas este usuário não está autorizado no admin.";
-          return;
-        }
-
-        loginMsg.textContent = "";
+        loginMsg.textContent = "Login realizado. Validando acesso...";
       } catch (e) {
         loginMsg.textContent = "Erro: " + formatError(e);
       } finally {
@@ -417,7 +416,7 @@
     const { data: { session } } = await supabase.auth.getSession();
     setLoggedIn(!!session);
 
-    supabase.auth.onAuthStateChange(async (_event, session2) => {
+    async function handleSessionChange(session2) {
       if (!session2) {
         setLoggedIn(false);
         return;
@@ -426,33 +425,27 @@
         const isAdmin = await ensureAdminPermission();
         setLoggedIn(isAdmin);
         if (!isAdmin) {
-          loginMsg.textContent = "Usuário sem permissão de admin.";
+          loginMsg.textContent = "Login OK, mas este usuário não está autorizado no admin.";
           await supabase.auth.signOut();
           return;
         }
+        loginMsg.textContent = "";
         await loadAdminData();
       } catch (e) {
         setLoggedIn(false);
         resMsg.textContent = "Erro ao carregar dados: " + formatError(e);
         loginMsg.textContent = "Erro ao validar admin: " + formatError(e);
       }
+    }
+
+    // Evita chamadas async diretas dentro do callback de auth
+    supabase.auth.onAuthStateChange((_event, session2) => {
+      setTimeout(() => {
+        handleSessionChange(session2);
+      }, 0);
     });
 
-    if (session) {
-      try {
-        const isAdmin = await ensureAdminPermission();
-        setLoggedIn(isAdmin);
-        if (!isAdmin) {
-          loginMsg.textContent = "Usuário sem permissão de admin.";
-          await supabase.auth.signOut();
-        } else {
-          await loadAdminData();
-        }
-      } catch (e) {
-        setLoggedIn(false);
-        resMsg.textContent = "Erro ao carregar dados: " + formatError(e);
-      }
-    }
+    if (session) await handleSessionChange(session);
   </script>
 </body>
 </html>

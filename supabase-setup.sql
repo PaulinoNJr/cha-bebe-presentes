@@ -49,6 +49,8 @@ create or replace function public.is_admin()
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select exists (
     select 1
@@ -125,7 +127,7 @@ $$;
 
 alter table public.gifts enable row level security;
 alter table public.gift_reservations enable row level security;
-alter table public.admin_emails enable row level security;
+alter table public.admin_emails disable row level security;
 
 drop policy if exists gifts_public_select on public.gifts;
 create policy gifts_public_select
@@ -156,13 +158,7 @@ for delete
 to authenticated
 using (public.is_admin());
 
-drop policy if exists admin_emails_admin_only on public.admin_emails;
-create policy admin_emails_admin_only
-on public.admin_emails
-for all
-to authenticated
-using (public.is_admin())
-with check (public.is_admin());
+revoke all on public.admin_emails from anon, authenticated;
 
 grant usage on schema public to anon, authenticated;
 grant select on public.gifts_view to anon, authenticated;
@@ -171,6 +167,7 @@ grant select on public.gift_reservations to anon, authenticated;
 grant insert, update on public.gifts to authenticated;
 grant delete on public.gift_reservations to authenticated;
 grant execute on function public.reserve_gift(bigint, text, integer) to anon, authenticated;
+grant execute on function public.is_admin() to authenticated;
 
 do $$
 begin
