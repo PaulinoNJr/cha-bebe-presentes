@@ -1,0 +1,30 @@
+﻿:root {
+      --mel-bg: #fff9ef;
+      --mel-accent: #f0a500;
+      --mel-accent-dark: #c78200;
+    }
+    body {
+      background:
+        radial-gradient(circle at top right, #fff4da 0%, transparent 45%),
+        radial-gradient(circle at bottom left, #ffe8bc 0%, transparent 42%),
+        var(--mel-bg);
+    }
+    h1 { color: #8f5b00; }
+    .card { border: 1px solid #f4d79e; }
+    .btn-primary {
+      background-color: var(--mel-accent);
+      border-color: var(--mel-accent);
+    }
+    .btn-primary:hover {
+      background-color: var(--mel-accent-dark);
+      border-color: var(--mel-accent-dark);
+    }
+    .btn-outline-primary {
+      color: #8f5b00;
+      border-color: #dbad4d;
+    }
+    .btn-outline-primary:hover {
+      color: #fff;
+      background: #c28718;
+      border-color: #c28718;
+    }
