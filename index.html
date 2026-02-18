@@ -20,7 +20,15 @@
         radial-gradient(circle at bottom left, #ffe8bc 0%, transparent 42%),
         var(--mel-bg);
     }
-    .gift-img { aspect-ratio: 16/9; object-fit: cover; }
+    .gift-img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      height: auto;
+      max-height: 320px;
+      object-fit: contain;
+      background: #fffdf8;
+      padding: 10px;
+    }
     .res-list { max-height: 160px; overflow:auto; }
     .sticky-actions {
       position: sticky;
