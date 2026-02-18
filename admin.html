@@ -219,7 +219,19 @@
       if (msg.includes("row-level security")) {
         return "Permissão negada (RLS). Verifique se seu email está em admin_emails.";
       }
+      if (msg.toLowerCase().includes("invalid login credentials")) {
+        return "Email ou senha inválidos.";
+      }
+      if (msg.toLowerCase().includes("email not confirmed")) {
+        return "Email não confirmado no Supabase Auth.";
+      }
       return msg;
+    }
+
+    async function ensureAdminPermission() {
+      const { data, error } = await supabase.rpc("is_admin");
+      if (error) throw error;
+      return data === true;
     }
 
     function setLoggedIn(logged) {
@@ -321,7 +333,19 @@
           email: email.value.trim(),
           password: password.value
         });
-        loginMsg.textContent = error ? ("Erro: " + formatError(error)) : "";
+        if (error) {
+          loginMsg.textContent = "Erro: " + formatError(error);
+          return;
+        }
+
+        const isAdmin = await ensureAdminPermission();
+        if (!isAdmin) {
+          await supabase.auth.signOut();
+          loginMsg.textContent = "Login OK, mas este usuário não está autorizado no admin.";
+          return;
+        }
+
+        loginMsg.textContent = "";
       } catch (e) {
         loginMsg.textContent = "Erro: " + formatError(e);
       } finally {
@@ -394,20 +418,38 @@
     setLoggedIn(!!session);
 
     supabase.auth.onAuthStateChange(async (_event, session2) => {
-      setLoggedIn(!!session2);
-      if (session2) {
-        try {
-          await loadAdminData();
-        } catch (e) {
-          resMsg.textContent = "Erro ao carregar dados: " + formatError(e);
+      if (!session2) {
+        setLoggedIn(false);
+        return;
+      }
+      try {
+        const isAdmin = await ensureAdminPermission();
+        setLoggedIn(isAdmin);
+        if (!isAdmin) {
+          loginMsg.textContent = "Usuário sem permissão de admin.";
+          await supabase.auth.signOut();
+          return;
         }
+        await loadAdminData();
+      } catch (e) {
+        setLoggedIn(false);
+        resMsg.textContent = "Erro ao carregar dados: " + formatError(e);
+        loginMsg.textContent = "Erro ao validar admin: " + formatError(e);
       }
     });
 
     if (session) {
       try {
-        await loadAdminData();
+        const isAdmin = await ensureAdminPermission();
+        setLoggedIn(isAdmin);
+        if (!isAdmin) {
+          loginMsg.textContent = "Usuário sem permissão de admin.";
+          await supabase.auth.signOut();
+        } else {
+          await loadAdminData();
+        }
       } catch (e) {
+        setLoggedIn(false);
         resMsg.textContent = "Erro ao carregar dados: " + formatError(e);
       }
     }
