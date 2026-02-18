@@ -57,7 +57,10 @@
         <h1 class="h4 mb-1">Chá da Melissa (Mel)</h1>
         <div class="text-muted small">Escolha um item, informe seu nome e quantidade. Reservas ficam públicas.</div>
       </div>
-      <div class="d-flex gap-2">
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <select id="classFilter" class="form-select form-select-sm" style="min-width: 210px;">
+          <option value="">Todas as classificações</option>
+        </select>
         <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Atualizar</button>
         <a href="./admin.html" class="btn btn-warning btn-sm">Admin</a>
       </div>
@@ -140,6 +143,7 @@
     const grid = document.getElementById("grid");
     const status = document.getElementById("status");
     const refreshBtn = document.getElementById("refreshBtn");
+    const classFilter = document.getElementById("classFilter");
 
     const missingConfig =
       !SUPABASE_URL ||
@@ -163,6 +167,7 @@
     const confirmBtn = document.getElementById("confirmBtn");
     const modalAlert = document.getElementById("modalAlert");
 
+    let classifications = [];
     let gifts = [];
     let reservations = [];
     let currentGift = null;
@@ -181,6 +186,25 @@
     function reservationsForGift(giftId) {
       return reservations.filter(r => r.gift_id === giftId)
         .sort((a,b) => new Date(b.reserved_at) - new Date(a.reserved_at));
+    }
+
+    function renderFilterOptions() {
+      const selected = classFilter.value;
+      classFilter.innerHTML =
+        `<option value="">Todas as classificações</option>` +
+        classifications.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+
+      if (selected && classifications.some(c => String(c.id) === selected)) {
+        classFilter.value = selected;
+      } else {
+        classFilter.value = "";
+      }
+    }
+
+    function getFilteredGifts() {
+      const selected = classFilter.value;
+      if (!selected) return gifts;
+      return gifts.filter(g => String(g.classification_id ?? "") === selected);
     }
 
     function giftCard(g) {
@@ -220,6 +244,7 @@
                 <h5 class="card-title mb-0">${esc(g.title)}</h5>
                 ${badge}
               </div>
+              <div class="small text-muted mt-1">${esc(g.classification_name || "Sem classificação")}</div>
               <p class="card-text text-muted small mt-2">${esc(g.description || "")}</p>
 
               <div class="d-flex flex-wrap gap-2 mt-auto pt-2">
@@ -237,19 +262,20 @@
       `;
     }
 
-    async function loadAll() {
-      status.className = "alert alert-secondary py-2 small";
-      status.textContent = "Carregando...";
+    function renderGrid() {
+      const filtered = getFilteredGifts();
+      const full = filtered.filter(g => g.qty_available <= 0).length;
+      const selectedText = classFilter.options[classFilter.selectedIndex]?.text || "Todas as classificações";
 
-      gifts = await sbFetch(`/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,qty_total,qty_reserved,qty_available&order=id.asc`);
-      reservations = await sbFetch(`/rest/v1/gift_reservations?select=gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc`);
-
-      const total = gifts.length;
-      const full = gifts.filter(g => g.qty_available <= 0).length;
       status.className = "alert alert-light border py-2 small";
-      status.textContent = `Itens: ${total} | Disponíveis: ${total - full} | Esgotados: ${full}`;
+      status.textContent = `Filtro: ${selectedText} | Exibindo: ${filtered.length} de ${gifts.length} | Disponíveis: ${filtered.length - full} | Esgotados: ${full}`;
 
-      grid.innerHTML = gifts.map(giftCard).join("");
+      if (!filtered.length) {
+        grid.innerHTML = `<div class="col-12"><div class="alert alert-warning py-2 small mb-0">Nenhum item nesta classificação.</div></div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(giftCard).join("");
 
       grid.querySelectorAll("button.btn-primary[data-id]").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -258,6 +284,18 @@
           openReserveModal(gift);
         });
       });
+    }
+
+    async function loadAll() {
+      status.className = "alert alert-secondary py-2 small";
+      status.textContent = "Carregando...";
+
+      classifications = await sbFetch(`/rest/v1/gift_classifications?select=id,name&order=name.asc`);
+      gifts = await sbFetch(`/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=id.asc`);
+      reservations = await sbFetch(`/rest/v1/gift_reservations?select=gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc`);
+
+      renderFilterOptions();
+      renderGrid();
     }
 
     function openReserveModal(gift) {
@@ -328,6 +366,7 @@
     });
 
     refreshBtn.addEventListener("click", loadAll);
+    classFilter.addEventListener("change", renderGrid);
     setInterval(loadAll, 15000); // auto-refresh leve
     loadAll();
   </script>

@@ -72,11 +72,42 @@
     <div id="adminArea" class="d-none">
       <div class="row g-3 mt-1">
         <div class="col-lg-5">
+          <div class="card shadow-sm mb-3">
+            <div class="card-body">
+              <h2 class="h6">Cadastro de Classificação</h2>
+
+              <div class="input-group input-group-sm mb-2">
+                <input id="className" class="form-control" placeholder="Ex: Higiene, Quarto, Roupas" />
+                <button id="saveClassBtn" class="btn btn-outline-primary">Salvar</button>
+              </div>
+              <div id="classMsg" class="small text-muted mb-2"></div>
+
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Classificação</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="classTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <div class="card shadow-sm">
             <div class="card-body">
               <h2 class="h6">Novo/Editar Presente</h2>
 
               <input type="hidden" id="giftId">
+
+              <div class="mb-2">
+                <label class="form-label">Classificação</label>
+                <select id="classification_id" class="form-select">
+                  <option value="">Sem classificação</option>
+                </select>
+              </div>
 
               <div class="mb-2">
                 <label class="form-label">Título</label>
@@ -127,6 +158,7 @@
                     <tr>
                       <th>#</th>
                       <th>Título</th>
+                      <th>Classificação</th>
                       <th>Total</th>
                       <th>Reservado</th>
                       <th>Disponível</th>
@@ -207,6 +239,7 @@
     const loginMsg = document.getElementById("loginMsg");
 
     const giftId = document.getElementById("giftId");
+    const classification_id = document.getElementById("classification_id");
     const title = document.getElementById("title");
     const description = document.getElementById("description");
     const image_url = document.getElementById("image_url");
@@ -215,6 +248,11 @@
     const saveGiftBtn = document.getElementById("saveGiftBtn");
     const clearBtn = document.getElementById("clearBtn");
     const adminMsg = document.getElementById("adminMsg");
+
+    const className = document.getElementById("className");
+    const saveClassBtn = document.getElementById("saveClassBtn");
+    const classMsg = document.getElementById("classMsg");
+    const classTbody = document.getElementById("classTbody");
 
     const giftsTbody = document.getElementById("giftsTbody");
     const resTbody = document.getElementById("resTbody");
@@ -235,6 +273,49 @@
       return msg;
     }
 
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+
+    let classifications = [];
+
+    function renderClassificationOptions(selected = "") {
+      classification_id.innerHTML = `<option value="">Sem classificação</option>` +
+        classifications.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+
+      if (selected !== "" && selected !== null && selected !== undefined) {
+        classification_id.value = String(selected);
+      } else {
+        classification_id.value = "";
+      }
+    }
+
+    function renderClassificationTable() {
+      classTbody.innerHTML = classifications.map(c => `
+        <tr>
+          <td>${esc(c.name)}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-danger" data-del-class="${c.id}">Remover</button>
+          </td>
+        </tr>
+      `).join("");
+
+      classTbody.querySelectorAll("button[data-del-class]").forEach(btn => {
+        btn.onclick = async () => {
+          const id = Number(btn.getAttribute("data-del-class"));
+          if (!confirm("Remover esta classificação?")) return;
+
+          const { error } = await supabase.from("gift_classifications").delete().eq("id", id);
+          if (error) {
+            classMsg.textContent = "Erro ao remover classificação: " + formatError(error);
+            return;
+          }
+          classMsg.textContent = "Classificação removida.";
+          await loadAdminData();
+        };
+      });
+    }
+
     async function ensureAdminPermission() {
       const { data, error } = await supabase.rpc("is_admin");
       if (error) throw error;
@@ -249,6 +330,7 @@
 
     function clearForm() {
       giftId.value = "";
+      classification_id.value = "";
       title.value = "";
       description.value = "";
       image_url.value = "";
@@ -258,10 +340,20 @@
     }
 
     async function loadAdminData() {
+      const { data: cls, error: ec } = await supabase
+        .from("gift_classifications")
+        .select("id,name")
+        .order("name", { ascending: true });
+
+      if (ec) throw ec;
+      classifications = cls ?? [];
+      renderClassificationOptions();
+      renderClassificationTable();
+
       // gifts_view
       const { data: gifts, error: eg } = await supabase
         .from("gifts_view")
-        .select("id,title,qty_total,qty_reserved,qty_available")
+        .select("id,title,classification_id,classification_name,qty_total,qty_reserved,qty_available")
         .order("id", { ascending: true });
 
       if (eg) throw eg;
@@ -270,6 +362,7 @@
         <tr>
           <td>${g.id}</td>
           <td>${g.title}</td>
+          <td>${g.classification_name ?? "-"}</td>
           <td>${g.qty_total}</td>
           <td>${g.qty_reserved}</td>
           <td>${g.qty_available}</td>
@@ -290,6 +383,7 @@
           image_url.value = data.image_url ?? "";
           buy_url.value = data.buy_url ?? "";
           qty_total.value = data.qty_total ?? 1;
+          renderClassificationOptions(data.classification_id ?? "");
           adminMsg.textContent = `Editando presente #${data.id}`;
         };
       });
@@ -358,10 +452,36 @@
       clearForm();
     };
 
+    saveClassBtn.onclick = async () => {
+      saveClassBtn.disabled = true;
+      classMsg.textContent = "Salvando classificação...";
+
+      const name = className.value.trim();
+      if (name.length < 2) {
+        classMsg.textContent = "Informe um nome de classificação com pelo menos 2 caracteres.";
+        saveClassBtn.disabled = false;
+        return;
+      }
+
+      try {
+        const { error } = await supabase.from("gift_classifications").insert({ name });
+        if (error) throw error;
+        className.value = "";
+        classMsg.textContent = "Classificação criada.";
+        await loadAdminData();
+      } catch (e) {
+        classMsg.textContent = "Erro ao criar classificação: " + formatError(e);
+      } finally {
+        saveClassBtn.disabled = false;
+      }
+    };
+
     saveGiftBtn.onclick = async () => {
       saveGiftBtn.disabled = true;
       adminMsg.textContent = "Salvando...";
+      const classIdNum = Number(classification_id.value);
       const payload = {
+        classification_id: Number.isInteger(classIdNum) && classIdNum > 0 ? classIdNum : null,
         title: title.value.trim(),
         description: description.value.trim() || null,
         image_url: image_url.value.trim() || null,
