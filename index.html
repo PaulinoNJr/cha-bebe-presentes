@@ -75,6 +75,10 @@
     </div>
   </div>
 
+  <div class="container pt-3 pb-1">
+    <div id="instructionsBox" class="alert alert-warning d-none mb-0"></div>
+  </div>
+
   <div class="container py-3">
     <div id="status" class="alert alert-secondary py-2 small">Carregando...</div>
     <div id="grid" class="row g-3"></div>
@@ -152,6 +156,7 @@
     const status = document.getElementById("status");
     const refreshBtn = document.getElementById("refreshBtn");
     const classFilter = document.getElementById("classFilter");
+    const instructionsBox = document.getElementById("instructionsBox");
 
     const missingConfig =
       !SUPABASE_URL ||
@@ -184,6 +189,21 @@
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
     const upper = (s) => String(s ?? "").toLocaleUpperCase("pt-BR");
+    const formatBRL = (v) => (v === null || v === undefined || v === "")
+      ? "Valor não informado"
+      : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v));
+
+    function sanitizeHtml(html) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(String(html ?? ""), "text/html");
+      doc.querySelectorAll("script,style,iframe,object").forEach(el => el.remove());
+      doc.querySelectorAll("*").forEach(el => {
+        [...el.attributes].forEach(attr => {
+          if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+        });
+      });
+      return doc.body.innerHTML;
+    }
 
     function setModalAlert(kind, msg) {
       modalAlert.classList.remove("d-none", "alert-danger", "alert-success", "alert-warning", "alert-info");
@@ -208,6 +228,17 @@
       } else {
         classFilter.value = "";
       }
+    }
+
+    function renderInstructions(siteContent) {
+      const html = siteContent?.instructions_html?.trim() || "";
+      if (!html) {
+        instructionsBox.classList.add("d-none");
+        instructionsBox.innerHTML = "";
+        return;
+      }
+      instructionsBox.innerHTML = sanitizeHtml(html);
+      instructionsBox.classList.remove("d-none");
     }
 
     function getFilteredGifts() {
@@ -254,6 +285,7 @@
                 ${badge}
               </div>
               <div class="small text-muted mt-1">${esc(g.classification_name || "Sem classificação")}</div>
+              <div class="small fw-semibold mt-1">${esc(formatBRL(g.price_value))}</div>
               <p class="card-text text-muted small mt-2">${esc(g.description || "")}</p>
 
               <div class="d-flex flex-wrap gap-2 mt-auto pt-2">
@@ -299,10 +331,12 @@
       status.className = "alert alert-secondary py-2 small";
       status.textContent = "Carregando...";
 
+      const siteContent = await sbFetch(`/rest/v1/site_content?select=instructions_html&id=eq.1&limit=1`);
       classifications = await sbFetch(`/rest/v1/gift_classifications?select=id,name&order=name.asc`);
-      gifts = await sbFetch(`/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=id.asc`);
+      gifts = await sbFetch(`/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=id.asc`);
       reservations = await sbFetch(`/rest/v1/gift_reservations?select=gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc`);
 
+      renderInstructions(siteContent?.[0] || null);
       renderFilterOptions();
       renderGrid();
     }
