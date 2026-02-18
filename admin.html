@@ -77,10 +77,27 @@
             <button class="btn btn-outline-secondary btn-sm" type="button" data-format="bold"><b>B</b></button>
             <button class="btn btn-outline-secondary btn-sm" type="button" data-format="italic"><i>I</i></button>
             <button class="btn btn-outline-secondary btn-sm" type="button" data-format="underline"><u>U</u></button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="strikeThrough"><s>S</s></button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="formatBlock" data-value="h2">H2</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="formatBlock" data-value="h3">H3</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="formatBlock" data-value="h4">H4</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="formatBlock" data-value="blockquote">Citação</button>
             <button class="btn btn-outline-secondary btn-sm" type="button" data-format="insertUnorderedList">Lista</button>
-            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="h3">Título</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="insertOrderedList">Lista Num.</button>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="justifyLeft">Esquerda</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="justifyCenter">Centro</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="justifyRight">Direita</button>
             <button class="btn btn-outline-secondary btn-sm" type="button" id="addLinkBtn">Link</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="unlink">Remover Link</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="undo">Desfazer</button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-format="redo">Refazer</button>
             <button class="btn btn-outline-secondary btn-sm" type="button" data-format="removeFormat">Limpar</button>
+            <label class="small text-muted mb-0 ms-1">Cor:</label>
+            <input id="foreColorPicker" type="color" value="#222222" class="form-control form-control-color form-control-sm p-1" title="Cor do texto" />
+            <label class="small text-muted mb-0">Fundo:</label>
+            <input id="hiliteColorPicker" type="color" value="#fff2a8" class="form-control form-control-color form-control-sm p-1" title="Cor de fundo" />
           </div>
           <div id="instructionsEditor" class="form-control" contenteditable="true" style="min-height:120px;"></div>
           <div class="d-flex gap-2 mt-2">
@@ -294,6 +311,8 @@
     const saveInstructionsBtn = document.getElementById("saveInstructionsBtn");
     const instructionsMsg = document.getElementById("instructionsMsg");
     const addLinkBtn = document.getElementById("addLinkBtn");
+    const foreColorPicker = document.getElementById("foreColorPicker");
+    const hiliteColorPicker = document.getElementById("hiliteColorPicker");
 
     function formatError(err) {
       const msg = String(err?.message || err || "Erro inesperado");
@@ -328,20 +347,32 @@
       return null;
     }
 
+    function pickPriceFromPattern(text, regex) {
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const parsed = parsePriceInput(match[1]);
+        if (parsed !== null && parsed > 0 && parsed < 1000000) return parsed;
+      }
+      return null;
+    }
+
     function extractPriceFromText(text) {
-      const patterns = [
-        /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/g,
-        /R\$\s*([0-9]+,[0-9]{2})/g,
-        /R\$\s*([0-9]+(?:\.[0-9]{2}))/g,
+      const source = String(text ?? "");
+
+      const priorityPatterns = [
+        /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/gi,
+        /R\$\s*([0-9]+,[0-9]{2})/gi,
+        /R\$\s*([0-9]+(?:\.[0-9]{2}))\b/gi,
+        /"price"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi,
+        /"lowPrice"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi,
+        /"highPrice"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi,
+        /price[^0-9]{0,20}([0-9]+(?:[.,][0-9]{1,2}))/gi,
       ];
 
-      for (const re of patterns) {
-        const m = re.exec(text);
+      for (const re of priorityPatterns) {
+        const found = pickPriceFromPattern(source, re);
         re.lastIndex = 0;
-        if (m?.[1]) {
-          const parsed = parsePriceInput(m[1]);
-          if (parsed !== null) return parsed;
-        }
+        if (found !== null) return found;
       }
       return null;
     }
@@ -368,10 +399,11 @@
       try { parsedUrl = new URL(raw); } catch { return null; }
       const noScheme = parsedUrl.href.replace(/^https?:\/\//i, "");
 
-      const candidates = [
+      const candidates = Array.from(new Set([
         parsedUrl.href,
         `https://r.jina.ai/http://${noScheme}`,
-      ];
+        `https://r.jina.ai/https://${noScheme}`,
+      ]));
 
       for (const u of candidates) {
         const text = await fetchTextWithTimeout(u, 10000);
@@ -382,12 +414,12 @@
       return null;
     }
 
-    function applyEditorFormat(cmd) {
+    function applyEditorFormat(cmd, value = null) {
       instructionsEditor.focus();
-      if (cmd === "h3") {
-        document.execCommand("formatBlock", false, "h3");
+      if (cmd === "formatBlock") {
+        document.execCommand("formatBlock", false, value || "p");
       } else {
-        document.execCommand(cmd, false, null);
+        document.execCommand(cmd, false, value);
       }
     }
 
@@ -437,7 +469,8 @@
     document.querySelectorAll("[data-format]").forEach(btn => {
       btn.addEventListener("click", () => {
         const cmd = btn.getAttribute("data-format");
-        if (cmd) applyEditorFormat(cmd);
+        const value = btn.getAttribute("data-value");
+        if (cmd) applyEditorFormat(cmd, value);
       });
     });
 
@@ -446,6 +479,14 @@
       if (!url) return;
       instructionsEditor.focus();
       document.execCommand("createLink", false, url.trim());
+    });
+
+    foreColorPicker.addEventListener("change", () => {
+      applyEditorFormat("foreColor", foreColorPicker.value);
+    });
+
+    hiliteColorPicker.addEventListener("change", () => {
+      applyEditorFormat("hiliteColor", hiliteColorPicker.value);
     });
 
     async function ensureAdminPermission() {
@@ -672,13 +713,24 @@
       const classIdNum = Number(classification_id.value);
       let priceNum = parsePriceInput(price_value.value);
       try {
-        if (priceNum === null && buy_url.value.trim()) {
-          priceNum = await detectPriceFromUrl(buy_url.value);
-          if (priceNum !== null) price_value.value = String(priceNum.toFixed(2));
+        if (buy_url.value.trim()) {
+          adminMsg.textContent = "Capturando valor pelo link...";
+          const detected = await detectPriceFromUrl(buy_url.value);
+          if (detected !== null) {
+            priceNum = detected;
+            price_value.value = String(priceNum.toFixed(2));
+          }
         }
       } catch {
-        // Continua salvando mesmo se não conseguir detectar valor automaticamente.
+        // Falha de rede/proxy; validação abaixo decide se pode salvar.
       }
+
+      if (buy_url.value.trim() && priceNum === null) {
+        adminMsg.textContent = "Não foi possível capturar o valor automaticamente. Informe o valor manualmente para salvar.";
+        saveGiftBtn.disabled = false;
+        return;
+      }
+
       const payload = {
         classification_id: Number.isInteger(classIdNum) && classIdNum > 0 ? classIdNum : null,
         title: upper(title.value),
