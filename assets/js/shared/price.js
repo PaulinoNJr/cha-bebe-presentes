@@ -18,10 +18,10 @@ export function parsePriceInput(value) {
   return null;
 }
 
-function pickPriceFromPattern(text, regex) {
+function pickPriceFromPattern(text, regex, groupIndex = 1) {
   let match;
   while ((match = regex.exec(text)) !== null) {
-    const parsed = parsePriceInput(match[1]);
+    const parsed = parsePriceInput(match[groupIndex]);
     if (parsed !== null && parsed > 0 && parsed < 1000000) {
       return parsed;
     }
@@ -31,19 +31,39 @@ function pickPriceFromPattern(text, regex) {
 
 export function extractPriceFromText(text) {
   const source = String(text ?? "");
+  const amountPattern =
+    "([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})|[0-9]+(?:[.,][0-9]{1,2})?)";
   const priorityPatterns = [
-    /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/gi,
-    /R\$\s*([0-9]+,[0-9]{2})/gi,
-    /R\$\s*([0-9]+(?:\.[0-9]{2}))\b/gi,
-    /"price"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi,
-    /"lowPrice"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi,
-    /"highPrice"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi,
-    /price[^0-9]{0,20}([0-9]+(?:[.,][0-9]{1,2}))/gi,
+    // "de X por Y": prioriza o preco apos "por".
+    {
+      regex: new RegExp(
+        `de\\s*(?:r\\$\\s*)?${amountPattern}\\s*(?:por|a)\\s*(?:r\\$\\s*)?${amountPattern}`,
+        "gi"
+      ),
+      group: 2,
+    },
+    {
+      regex: new RegExp(`\\bpor\\s*(?:r\\$\\s*)?${amountPattern}`, "gi"),
+      group: 1,
+    },
+    {
+      regex: new RegExp(`\\b(?:pix|a\\s*vista)\\s*(?:por|:|-)?\\s*(?:r\\$\\s*)?${amountPattern}`, "gi"),
+      group: 1,
+    },
+    { regex: /"price"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi, group: 1 },
+    { regex: /"lowPrice"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi, group: 1 },
+    { regex: /"highPrice"\s*:\s*"([0-9]+(?:[.,][0-9]{1,2})?)"/gi, group: 1 },
+    { regex: /price[^0-9]{0,20}([0-9]+(?:[.,][0-9]{1,2}))/gi, group: 1 },
+    { regex: /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/gi, group: 1 },
+    { regex: /R\$\s*([0-9]+,[0-9]{2})/gi, group: 1 },
+    { regex: /R\$\s*([0-9]+(?:\.[0-9]{2}))\b/gi, group: 1 },
+    { regex: /([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/gi, group: 1 },
+    { regex: /([0-9]+(?:\.[0-9]{2}))\b/gi, group: 1 },
   ];
 
-  for (const re of priorityPatterns) {
-    const found = pickPriceFromPattern(source, re);
-    re.lastIndex = 0;
+  for (const { regex, group } of priorityPatterns) {
+    const found = pickPriceFromPattern(source, regex, group);
+    regex.lastIndex = 0;
     if (found !== null) {
       return found;
     }

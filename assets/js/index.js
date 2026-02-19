@@ -105,6 +105,8 @@ function getFilteredGifts() {
 
 function giftCard(g) {
   const isFull = g.qty_available <= 0;
+  const hasPrice = !(g.price_value === null || g.price_value === undefined || g.price_value === "");
+  const priceLabel = hasPrice ? `Por ${formatBRL(g.price_value)}` : formatBRL(g.price_value);
 
   const img = g.image_url
     ? `<img src="${esc(g.image_url)}" class="card-img-top gift-img" alt="${esc(g.title)}">`
@@ -145,7 +147,7 @@ function giftCard(g) {
             ${badge}
           </div>
           <div class="small text-muted mt-1">${esc(g.classification_name || "Sem classificacao")}</div>
-          <div class="small fw-semibold mt-1">${esc(formatBRL(g.price_value))}</div>
+          <div class="small fw-semibold mt-1">${esc(priceLabel)}</div>
           <p class="card-text text-muted small mt-2">${esc(g.description || "")}</p>
 
           <div class="d-flex flex-wrap gap-2 mt-auto pt-2">
