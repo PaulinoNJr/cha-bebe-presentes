@@ -30,6 +30,8 @@ const classMsg = document.getElementById("classMsg");
 const classTbody = document.getElementById("classTbody");
 
 const giftsTbody = document.getElementById("giftsTbody");
+const giftCategoryFilter = document.getElementById("giftCategoryFilter");
+const giftsFilterInfo = document.getElementById("giftsFilterInfo");
 const resTbody = document.getElementById("resTbody");
 const refreshBtn = document.getElementById("refreshBtn");
 const resMsg = document.getElementById("resMsg");
@@ -41,6 +43,7 @@ const foreColorPicker = document.getElementById("foreColorPicker");
 const hiliteColorPicker = document.getElementById("hiliteColorPicker");
 
 let classifications = [];
+let giftsCache = [];
 
 function formatError(err) {
   const msg = String(err?.message || err || "Erro inesperado");
@@ -205,6 +208,138 @@ async function deleteGiftAndClearReservations(giftIdToDelete) {
   }
 }
 
+function renderGiftFilterOptions() {
+  const previousValue = giftCategoryFilter?.value ?? "";
+  if (!giftCategoryFilter) {
+    return;
+  }
+
+  giftCategoryFilter.innerHTML =
+    '<option value="">Todas</option>' +
+    classifications.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+
+  if (previousValue && classifications.some((c) => String(c.id) === previousValue)) {
+    giftCategoryFilter.value = previousValue;
+  } else {
+    giftCategoryFilter.value = "";
+  }
+}
+
+function getFilteredGifts() {
+  const selectedClass = giftCategoryFilter?.value ?? "";
+  if (!selectedClass) {
+    return giftsCache;
+  }
+  return giftsCache.filter((g) => String(g.classification_id ?? "") === selectedClass);
+}
+
+function renderGiftsTable() {
+  const gifts = getFilteredGifts();
+  const selectedClass = giftCategoryFilter?.value ?? "";
+  const selectedClassName = selectedClass
+    ? classifications.find((c) => String(c.id) === selectedClass)?.name || "Categoria"
+    : "Todas";
+
+  if (giftsFilterInfo) {
+    giftsFilterInfo.textContent = `Filtro: ${selectedClassName} | Exibindo ${gifts.length} de ${giftsCache.length} itens.`;
+  }
+
+  if (!gifts.length) {
+    giftsTbody.innerHTML =
+      '<tr><td colspan="9" class="text-muted small">Nenhum item para esta categoria.</td></tr>';
+    return;
+  }
+
+  giftsTbody.innerHTML = gifts
+    .map(
+      (g) => `
+        <tr>
+          <td>${g.id}</td>
+          <td class="gift-title-cell">${esc(upper(g.title || ""))}</td>
+          <td class="gift-class-cell">${esc(g.classification_name || "-")}</td>
+          <td>${formatBRL(g.price_value, "-")}</td>
+          <td>${
+            g.is_active === false
+              ? '<span class="badge text-bg-secondary">INATIVO</span>'
+              : '<span class="badge text-bg-success">ATIVO</span>'
+          }</td>
+          <td>${g.qty_total}</td>
+          <td>${g.qty_reserved}</td>
+          <td>${g.qty_available}</td>
+          <td class="text-end gift-actions-cell">
+            <details class="gift-actions-menu">
+              <summary class="btn btn-sm btn-outline-secondary">Ações</summary>
+              <div class="gift-actions-list">
+                <a class="btn btn-sm btn-outline-secondary w-100" href="./admin-item.html?id=${g.id}">Editar</a>
+                <button
+                  class="btn btn-sm ${g.is_active === false ? "btn-outline-success" : "btn-outline-warning"} w-100"
+                  data-toggle-active="${g.id}"
+                  data-next-active="${g.is_active === false ? "true" : "false"}"
+                >${g.is_active === false ? "Ativar" : "Desativar"}</button>
+                <button class="btn btn-sm btn-outline-danger w-100" data-delete-gift="${g.id}">Excluir</button>
+              </div>
+            </details>
+          </td>
+        </tr>
+      `
+    )
+    .join("");
+
+  giftsTbody.querySelectorAll("button[data-toggle-active]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-toggle-active"));
+      const nextActive = btn.getAttribute("data-next-active") === "true";
+      const confirmMsg = nextActive
+        ? "Ativar este presente?"
+        : "Desativar este presente e limpar todas as reservas dele?";
+
+      if (!confirm(confirmMsg)) {
+        return;
+      }
+
+      btn.disabled = true;
+      resMsg.textContent = nextActive ? "Ativando presente..." : "Desativando presente e limpando reservas...";
+
+      try {
+        if (nextActive) {
+          await setGiftActiveState(id, true);
+          resMsg.textContent = "Presente ativado.";
+        } else {
+          await setGiftActiveState(id, false);
+          await clearGiftReservations(id);
+          resMsg.textContent = "Presente desativado e reservas removidas.";
+        }
+        await loadAdminData();
+      } catch (e) {
+        resMsg.textContent = `Erro ao alterar status: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
+  giftsTbody.querySelectorAll("button[data-delete-gift]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-delete-gift"));
+      if (!confirm("Excluir este presente? As reservas dele tambem serao removidas.")) {
+        return;
+      }
+
+      btn.disabled = true;
+      resMsg.textContent = "Excluindo presente...";
+      try {
+        await deleteGiftAndClearReservations(id);
+        resMsg.textContent = "Presente excluido e reservas removidas.";
+        await loadAdminData();
+      } catch (e) {
+        resMsg.textContent = `Erro ao excluir: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
 async function loadAdminData() {
   const { data: site, error: es } = await supabase
     .from("site_content")
@@ -290,91 +425,9 @@ async function loadAdminData() {
     throw eg;
   }
 
-  giftsTbody.innerHTML = gifts
-    .map(
-      (g) => `
-        <tr>
-          <td>${g.id}</td>
-          <td>${upper(g.title)}</td>
-          <td>${g.classification_name ?? "-"}</td>
-          <td>${formatBRL(g.price_value, "-")}</td>
-          <td>${
-            g.is_active === false
-              ? '<span class="badge text-bg-secondary">INATIVO</span>'
-              : '<span class="badge text-bg-success">ATIVO</span>'
-          }</td>
-          <td>${g.qty_total}</td>
-          <td>${g.qty_reserved}</td>
-          <td>${g.qty_available}</td>
-          <td class="text-end">
-            <div class="d-flex gap-1 justify-content-end flex-wrap">
-              <a class="btn btn-sm btn-outline-secondary" href="./admin-item.html?id=${g.id}">Editar</a>
-              <button
-                class="btn btn-sm ${g.is_active === false ? "btn-outline-success" : "btn-outline-warning"}"
-                data-toggle-active="${g.id}"
-                data-next-active="${g.is_active === false ? "true" : "false"}"
-              >${g.is_active === false ? "Ativar" : "Desativar"}</button>
-              <button class="btn btn-sm btn-outline-danger" data-delete-gift="${g.id}">Excluir</button>
-            </div>
-          </td>
-        </tr>
-      `
-    )
-    .join("");
-
-  giftsTbody.querySelectorAll("button[data-toggle-active]").forEach((btn) => {
-    btn.onclick = async () => {
-      const id = Number(btn.getAttribute("data-toggle-active"));
-      const nextActive = btn.getAttribute("data-next-active") === "true";
-      const confirmMsg = nextActive
-        ? "Ativar este presente?"
-        : "Desativar este presente e limpar todas as reservas dele?";
-
-      if (!confirm(confirmMsg)) {
-        return;
-      }
-
-      btn.disabled = true;
-      resMsg.textContent = nextActive ? "Ativando presente..." : "Desativando presente e limpando reservas...";
-
-      try {
-        if (nextActive) {
-          await setGiftActiveState(id, true);
-          resMsg.textContent = "Presente ativado.";
-        } else {
-          await setGiftActiveState(id, false);
-          await clearGiftReservations(id);
-          resMsg.textContent = "Presente desativado e reservas removidas.";
-        }
-        await loadAdminData();
-      } catch (e) {
-        resMsg.textContent = `Erro ao alterar status: ${formatError(e)}`;
-      } finally {
-        btn.disabled = false;
-      }
-    };
-  });
-
-  giftsTbody.querySelectorAll("button[data-delete-gift]").forEach((btn) => {
-    btn.onclick = async () => {
-      const id = Number(btn.getAttribute("data-delete-gift"));
-      if (!confirm("Excluir este presente? As reservas dele tambem serao removidas.")) {
-        return;
-      }
-
-      btn.disabled = true;
-      resMsg.textContent = "Excluindo presente...";
-      try {
-        await deleteGiftAndClearReservations(id);
-        resMsg.textContent = "Presente excluido e reservas removidas.";
-        await loadAdminData();
-      } catch (e) {
-        resMsg.textContent = `Erro ao excluir: ${formatError(e)}`;
-      } finally {
-        btn.disabled = false;
-      }
-    };
-  });
+  giftsCache = gifts;
+  renderGiftFilterOptions();
+  renderGiftsTable();
 
   const { data: res, error: er } = await supabase
     .from("gift_reservations")
@@ -529,6 +582,12 @@ refreshBtn.onclick = async () => {
     resMsg.textContent = `Erro ao atualizar: ${formatError(e)}`;
   }
 };
+
+if (giftCategoryFilter) {
+  giftCategoryFilter.onchange = () => {
+    renderGiftsTable();
+  };
+}
 
 const {
   data: { session },
