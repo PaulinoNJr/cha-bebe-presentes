@@ -34,6 +34,16 @@ export function extractPriceFromText(text) {
   const amountPattern =
     "([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})|[0-9]+(?:[.,][0-9]{1,2})?)";
   const priorityPatterns = [
+    // Mercado Livre markdown: ~~R$ antigo~~ R$ novo
+    {
+      regex: new RegExp(`~~\\s*R\\$\\s*${amountPattern}\\s*~~\\s*R\\$\\s*${amountPattern}`, "gi"),
+      group: 2,
+    },
+    // Outro formato comum de vitrine: R$ antigo R$ novo 12% OFF
+    {
+      regex: new RegExp(`R\\$\\s*${amountPattern}\\s+R\\$\\s*${amountPattern}\\s+[0-9]{1,2}%\\s*OFF`, "gi"),
+      group: 2,
+    },
     // "de X por Y": prioriza o preco apos "por".
     {
       regex: new RegExp(
@@ -89,6 +99,12 @@ async function fetchTextWithTimeout(url, ms = 10000) {
   }
 }
 
+function extractMercadoLivreItemId(text) {
+  const source = String(text ?? "");
+  const match = source.match(/\bML[A-Z]\d{7,}\b/i);
+  return match ? match[0].toUpperCase() : null;
+}
+
 export async function detectPriceFromUrl(url, timeoutMs = 10000) {
   const raw = String(url ?? "").trim();
   if (!raw) {
@@ -110,6 +126,9 @@ export async function detectPriceFromUrl(url, timeoutMs = 10000) {
       `https://r.jina.ai/https://${noScheme}`,
     ])
   );
+  const isMercadoLivre =
+    /mercadolivre|mercadolibre/i.test(parsedUrl.hostname) ||
+    /mercadolivre|mercadolibre/i.test(parsedUrl.href);
 
   for (const candidate of candidates) {
     const text = await fetchTextWithTimeout(candidate, timeoutMs);
@@ -120,6 +139,31 @@ export async function detectPriceFromUrl(url, timeoutMs = 10000) {
     const price = extractPriceFromText(text);
     if (price !== null) {
       return price;
+    }
+
+    // Para links encurtados do Mercado Livre, tenta abrir o item canonical por MLBxxxx.
+    if (isMercadoLivre) {
+      const itemId = extractMercadoLivreItemId(text);
+      if (itemId && itemId.startsWith("MLB")) {
+        const itemSlug = `${itemId.slice(0, 3)}-${itemId.slice(3)}`;
+        const mlCandidates = Array.from(
+          new Set([
+            `https://produto.mercadolivre.com.br/${itemSlug}`,
+            `https://r.jina.ai/http://produto.mercadolivre.com.br/${itemSlug}`,
+            `https://r.jina.ai/https://produto.mercadolivre.com.br/${itemSlug}`,
+          ])
+        );
+        for (const mlUrl of mlCandidates) {
+          const mlText = await fetchTextWithTimeout(mlUrl, timeoutMs);
+          if (!mlText) {
+            continue;
+          }
+          const mlPrice = extractPriceFromText(mlText);
+          if (mlPrice !== null) {
+            return mlPrice;
+          }
+        }
+      }
     }
   }
 
