@@ -41,6 +41,7 @@ const clearBtn = document.getElementById("clearBtn");
 const adminMsg = document.getElementById("adminMsg");
 
 let classifications = [];
+let pageInitialized = false;
 
 function formatError(err) {
   const msg = String(err?.message || err || "Erro inesperado");
@@ -333,9 +334,10 @@ async function loadPageForSession() {
   }
 }
 
-async function handleSessionChange(session2) {
+async function handleSessionChange(session2, { reloadForm = false } = {}) {
   if (!session2) {
     setLoggedIn(false);
+    pageInitialized = false;
     return;
   }
 
@@ -349,7 +351,10 @@ async function handleSessionChange(session2) {
     }
 
     loginMsg.textContent = "";
-    await loadPageForSession();
+    if (!pageInitialized || reloadForm) {
+      await loadPageForSession();
+      pageInitialized = true;
+    }
   } catch (e) {
     setLoggedIn(false);
     adminMsg.textContent = `Erro ao carregar dados: ${formatError(e)}`;
@@ -362,12 +367,18 @@ const {
 } = await supabase.auth.getSession();
 setLoggedIn(!!session);
 
-supabase.auth.onAuthStateChange((_event, session2) => {
+supabase.auth.onAuthStateChange((event, session2) => {
   setTimeout(() => {
-    handleSessionChange(session2);
+    if (event === "SIGNED_OUT") {
+      handleSessionChange(null);
+      return;
+    }
+    // Evita limpar formulario em eventos como TOKEN_REFRESHED.
+    const mustReloadForm = event === "SIGNED_IN";
+    handleSessionChange(session2, { reloadForm: mustReloadForm });
   }, 0);
 });
 
 if (session) {
-  await handleSessionChange(session);
+  await handleSessionChange(session, { reloadForm: true });
 }
