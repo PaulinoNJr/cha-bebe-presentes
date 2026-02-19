@@ -84,7 +84,7 @@ let classifications = [];
 
 function renderClassificationOptions(selected = "") {
   classification_id.innerHTML =
-    '<option value="">Sem classificacao</option>' +
+    '<option value="">Selecione a classificacao</option>' +
     classifications.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
 
   if (selected !== "" && selected !== null && selected !== undefined) {
@@ -178,6 +178,15 @@ function clearForm() {
   price_value.value = "";
   qty_total.value = 1;
   adminMsg.textContent = "";
+}
+
+function isValidHttpUrl(value) {
+  try {
+    const u = new URL(String(value ?? "").trim());
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 async function clearGiftReservations(giftIdToClear) {
@@ -532,6 +541,7 @@ buy_url.addEventListener("blur", async () => {
 saveGiftBtn.onclick = async () => {
   saveGiftBtn.disabled = true;
   adminMsg.textContent = "Salvando...";
+  const isEditing = !!giftId.value;
   const classIdNum = Number(classification_id.value);
   let priceNum = parsePriceInput(price_value.value);
 
@@ -548,36 +558,66 @@ saveGiftBtn.onclick = async () => {
     // Falha de rede/proxy; validacao abaixo decide se pode salvar.
   }
 
-  if (buy_url.value.trim() && priceNum === null) {
-    adminMsg.textContent =
-      "Nao foi possivel capturar o valor automaticamente. Informe o valor manualmente para salvar.";
+  const classificationId = Number.isInteger(classIdNum) && classIdNum > 0 ? classIdNum : null;
+  const titleValue = upper(title.value);
+  const descriptionValue = description.value.trim() || null;
+  const imageUrlValue = image_url.value.trim();
+  const buyUrlValue = buy_url.value.trim();
+  const qtyTotalValue = Number(qty_total.value || 1);
+
+  if (!classificationId) {
+    adminMsg.textContent = "Selecione uma classificacao.";
     saveGiftBtn.disabled = false;
     return;
   }
-
-  const payload = {
-    classification_id: Number.isInteger(classIdNum) && classIdNum > 0 ? classIdNum : null,
-    title: upper(title.value),
-    description: description.value.trim() || null,
-    image_url: image_url.value.trim() || null,
-    buy_url: buy_url.value.trim() || null,
-    price_value: priceNum,
-    qty_total: Number(qty_total.value || 1),
-  };
-
-  if (!payload.title) {
+  if (!titleValue) {
     adminMsg.textContent = "Informe o titulo.";
     saveGiftBtn.disabled = false;
     return;
   }
-  if (!Number.isInteger(payload.qty_total) || payload.qty_total < 1) {
+  if (!imageUrlValue) {
+    adminMsg.textContent = "Informe a URL da imagem.";
+    saveGiftBtn.disabled = false;
+    return;
+  }
+  if (!isValidHttpUrl(imageUrlValue)) {
+    adminMsg.textContent = "URL da imagem invalida. Use http(s)://...";
+    saveGiftBtn.disabled = false;
+    return;
+  }
+  if (!buyUrlValue) {
+    adminMsg.textContent = "Informe o link de compra.";
+    saveGiftBtn.disabled = false;
+    return;
+  }
+  if (!isValidHttpUrl(buyUrlValue)) {
+    adminMsg.textContent = "Link de compra invalido. Use http(s)://...";
+    saveGiftBtn.disabled = false;
+    return;
+  }
+  if (priceNum === null) {
+    adminMsg.textContent = "Informe o valor do item.";
+    saveGiftBtn.disabled = false;
+    return;
+  }
+  if (!Number.isInteger(qtyTotalValue) || qtyTotalValue < 1) {
     adminMsg.textContent = "Quantidade total invalida.";
     saveGiftBtn.disabled = false;
     return;
   }
 
+  const payload = {
+    classification_id: classificationId,
+    title: titleValue,
+    description: descriptionValue,
+    image_url: imageUrlValue,
+    buy_url: buyUrlValue,
+    price_value: priceNum,
+    qty_total: qtyTotalValue,
+  };
+
   try {
-    if (giftId.value) {
+    if (isEditing) {
       const { error } = await supabase
         .from("gifts")
         .update(payload)
@@ -596,6 +636,10 @@ saveGiftBtn.onclick = async () => {
 
     try {
       await loadAdminData();
+      if (!isEditing) {
+        clearForm();
+        adminMsg.textContent = "Criado. Formulario limpo para o proximo item.";
+      }
     } catch (e) {
       adminMsg.textContent = `Salvou, mas falhou ao recarregar: ${formatError(e)}`;
     }

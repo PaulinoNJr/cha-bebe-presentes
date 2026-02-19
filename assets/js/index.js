@@ -88,10 +88,19 @@ function renderInstructions(siteContent) {
 
 function getFilteredGifts() {
   const selected = classFilter.value;
-  if (!selected) {
-    return gifts;
-  }
-  return gifts.filter((g) => String(g.classification_id ?? "") === selected);
+  const base = !selected
+    ? gifts
+    : gifts.filter((g) => String(g.classification_id ?? "") === selected);
+
+  // Disponiveis primeiro; esgotados vao para o final da lista.
+  return [...base].sort((a, b) => {
+    const aFull = a.qty_available <= 0 ? 1 : 0;
+    const bFull = b.qty_available <= 0 ? 1 : 0;
+    if (aFull !== bFull) {
+      return aFull - bFull;
+    }
+    return a.id - b.id;
+  });
 }
 
 function giftCard(g) {

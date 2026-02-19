@@ -90,6 +90,19 @@
       border-radius: 14px;
       border: 1px solid #f2dce7;
     }
+    #instructionsBox {
+      padding: 0.65rem 0.8rem;
+      font-size: 0.92rem;
+      max-height: 190px;
+      overflow: auto;
+      line-height: 1.35;
+    }
+    #instructionsBox :is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote) {
+      margin-bottom: 0.45rem;
+    }
+    #instructionsBox :last-child {
+      margin-bottom: 0;
+    }
     .btn {
       border-radius: 14px;
       font-weight: 700;

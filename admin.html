@@ -110,14 +110,14 @@
 
               <div class="mb-2">
                 <label class="form-label">Classificação</label>
-                <select id="classification_id" class="form-select">
-                  <option value="">Sem classificação</option>
+                <select id="classification_id" class="form-select" required>
+                  <option value="">Selecione a classificação</option>
                 </select>
               </div>
 
               <div class="mb-2">
                 <label class="form-label">Título</label>
-                <input id="title" class="form-control text-uppercase" placeholder="Ex: FRALDA P" />
+                <input id="title" class="form-control text-uppercase" placeholder="Ex: FRALDA P" required />
               </div>
 
               <div class="mb-2">
@@ -127,18 +127,18 @@
 
               <div class="mb-2">
                 <label class="form-label">Imagem (URL)</label>
-                <input id="image_url" class="form-control" placeholder="https://..." />
+                <input id="image_url" class="form-control" placeholder="https://..." required />
               </div>
 
               <div class="mb-2">
                 <label class="form-label">Link compra (URL)</label>
-                <input id="buy_url" class="form-control" placeholder="https://..." />
+                <input id="buy_url" class="form-control" placeholder="https://..." required />
               </div>
 
               <div class="mb-2">
                 <label class="form-label">Valor (R$)</label>
                 <div class="input-group">
-                  <input id="price_value" class="form-control" placeholder="Auto pelo link (editável)" />
+                  <input id="price_value" class="form-control" placeholder="Auto pelo link (editável)" required />
                   <button id="detectPriceBtn" class="btn btn-outline-secondary" type="button">Capturar valor</button>
                 </div>
                 <div class="form-text">Ao informar link de compra, tente capturar o valor.</div>
@@ -146,7 +146,7 @@
 
               <div class="mb-3">
                 <label class="form-label">Quantidade total</label>
-                <input id="qty_total" class="form-control" type="number" min="1" value="1" />
+                <input id="qty_total" class="form-control" type="number" min="1" value="1" required />
               </div>
 
               <div class="d-flex gap-2">
