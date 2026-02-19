@@ -1,4 +1,4 @@
-﻿import { getSupabaseConfig, isMissingSupabaseConfig } from "./shared/config.js";
+import { getSupabaseConfig, isMissingSupabaseConfig } from "./shared/config.js";
 import { upper, formatBRL, esc } from "./shared/formatters.js";
 import { parsePriceInput, detectPriceFromUrl } from "./shared/price.js";
 import { createSupabaseBrowserClient } from "./shared/supabase-client.js";
@@ -35,10 +35,11 @@ const buy_url = document.getElementById("buy_url");
 const price_value = document.getElementById("price_value");
 const detectPriceBtn = document.getElementById("detectPriceBtn");
 const qty_total = document.getElementById("qty_total");
-const display_order = document.getElementById("display_order");
 const saveGiftBtn = document.getElementById("saveGiftBtn");
 const clearBtn = document.getElementById("clearBtn");
 const adminMsg = document.getElementById("adminMsg");
+
+const DRAFT_KEY_NEW = "admin_item_draft_new";
 
 let classifications = [];
 let pageInitialized = false;
@@ -81,12 +82,45 @@ function currentEditId() {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+function draftKeyFor(editId = currentEditId()) {
+  return editId ? `admin_item_draft_edit_${editId}` : DRAFT_KEY_NEW;
+}
+
+function readDraftByKey(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    const data = JSON.parse(raw);
+    return typeof data === "object" && data ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraftByKey(key, draft) {
+  try {
+    localStorage.setItem(key, JSON.stringify(draft));
+  } catch {
+    // Ignora falhas de storage para nao quebrar o formulario.
+  }
+}
+
+function removeDraftByKey(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignora falhas de storage.
+  }
+}
+
 function resetUrlToCreateMode() {
   const cleanUrl = `${window.location.pathname}`;
   window.history.replaceState({}, "", cleanUrl);
 }
 
-function clearForm(resetUrl = false) {
+function clearFieldsOnly() {
   giftId.value = "";
   classification_id.value = "";
   title.value = "";
@@ -95,12 +129,58 @@ function clearForm(resetUrl = false) {
   buy_url.value = "";
   price_value.value = "";
   qty_total.value = 1;
-  display_order.value = 0;
   formTitle.textContent = "Cadastrar item";
   adminMsg.textContent = "";
-  if (resetUrl) {
-    resetUrlToCreateMode();
+}
+
+function snapshotFormDraft() {
+  return {
+    classification_id: classification_id.value || "",
+    title: title.value || "",
+    description: description.value || "",
+    image_url: image_url.value || "",
+    buy_url: buy_url.value || "",
+    price_value: price_value.value || "",
+    qty_total: qty_total.value || "1",
+  };
+}
+
+function saveCurrentDraft() {
+  writeDraftByKey(draftKeyFor(), snapshotFormDraft());
+}
+
+function applyDraftToForm(draft) {
+  if (!draft) {
+    return false;
   }
+
+  title.value = String(draft.title ?? "");
+  description.value = String(draft.description ?? "");
+  image_url.value = String(draft.image_url ?? "");
+  buy_url.value = String(draft.buy_url ?? "");
+  price_value.value = String(draft.price_value ?? "");
+
+  const qty = Number(draft.qty_total);
+  qty_total.value = Number.isInteger(qty) && qty > 0 ? String(qty) : "1";
+
+  const draftClassificationId = String(draft.classification_id ?? "");
+  if (draftClassificationId) {
+    classification_id.value = draftClassificationId;
+  }
+
+  return true;
+}
+
+function clearDraftForCurrentContext() {
+  removeDraftByKey(draftKeyFor());
+}
+
+function clearAllItemDraftsForCurrentGift() {
+  const editId = currentEditId();
+  if (editId) {
+    removeDraftByKey(draftKeyFor(editId));
+  }
+  removeDraftByKey(DRAFT_KEY_NEW);
 }
 
 function renderClassificationOptions(selected = "") {
@@ -114,25 +194,49 @@ function renderClassificationOptions(selected = "") {
 }
 
 async function loadClassifications(selected = "") {
-  const { data, error } = await supabase
+  const withOrder = await supabase
     .from("gift_classifications")
-    .select("id,name")
+    .select("id,name,display_order")
+    .order("display_order", { ascending: true })
     .order("name", { ascending: true });
-  if (error) {
-    throw error;
+
+  if (withOrder.error) {
+    const maybeMissingColumn = String(withOrder.error?.message || "")
+      .toLowerCase()
+      .includes("display_order");
+    if (!maybeMissingColumn) {
+      throw withOrder.error;
+    }
+
+    const fallback = await supabase
+      .from("gift_classifications")
+      .select("id,name")
+      .order("name", { ascending: true });
+    if (fallback.error) {
+      throw fallback.error;
+    }
+    classifications = fallback.data ?? [];
+    renderClassificationOptions(selected);
+    return;
   }
-  classifications = data ?? [];
+
+  classifications = withOrder.data ?? [];
   renderClassificationOptions(selected);
 }
 
 async function loadGiftForEdit(id) {
-  const { data, error } = await supabase.from("gifts").select("*").eq("id", id).single();
+  const { data, error } = await supabase
+    .from("gifts")
+    .select("id,classification_id,title,description,image_url,buy_url,price_value,qty_total")
+    .eq("id", id)
+    .single();
   if (error) {
     throw error;
   }
 
   giftId.value = String(data.id);
   await loadClassifications(data.classification_id ?? "");
+
   title.value = upper(data.title);
   description.value = data.description ?? "";
   image_url.value = data.image_url ?? "";
@@ -140,9 +244,13 @@ async function loadGiftForEdit(id) {
   price_value.value =
     data.price_value === null || data.price_value === undefined ? "" : String(data.price_value);
   qty_total.value = data.qty_total ?? 1;
-  display_order.value = Number.isInteger(data.display_order) ? data.display_order : 0;
   formTitle.textContent = `Editar item #${data.id}`;
   adminMsg.textContent = "Modo edicao carregado.";
+
+  const restored = applyDraftToForm(readDraftByKey(draftKeyFor(id)));
+  if (restored) {
+    adminMsg.textContent = "Rascunho restaurado para este item.";
+  }
 }
 
 async function ensureAdminPermission() {
@@ -151,6 +259,14 @@ async function ensureAdminPermission() {
     throw error;
   }
   return data === true;
+}
+
+function watchDraftPersistence() {
+  const fields = [classification_id, title, description, image_url, buy_url, price_value, qty_total];
+  fields.forEach((field) => {
+    field.addEventListener("input", saveCurrentDraft);
+    field.addEventListener("change", saveCurrentDraft);
+  });
 }
 
 loginBtn.onclick = async () => {
@@ -176,11 +292,12 @@ loginBtn.onclick = async () => {
 logoutBtn.onclick = async () => {
   await supabase.auth.signOut();
   setLoggedIn(false);
-  clearForm(false);
 };
 
 clearBtn.onclick = async () => {
-  clearForm(true);
+  clearAllItemDraftsForCurrentGift();
+  clearFieldsOnly();
+  resetUrlToCreateMode();
   try {
     await loadClassifications("");
   } catch (e) {
@@ -197,6 +314,7 @@ detectPriceBtn.onclick = async () => {
       adminMsg.textContent = "Nao foi possivel identificar o valor neste link.";
     } else {
       price_value.value = String(detected.toFixed(2));
+      saveCurrentDraft();
       adminMsg.textContent = `Valor detectado: ${formatBRL(detected)}.`;
     }
   } catch (e) {
@@ -214,6 +332,7 @@ buy_url.addEventListener("blur", async () => {
     const detected = await detectPriceFromUrl(buy_url.value);
     if (detected !== null) {
       price_value.value = String(detected.toFixed(2));
+      saveCurrentDraft();
     }
   } catch {
     // Falha silenciosa para nao interromper o formulario.
@@ -225,6 +344,7 @@ saveGiftBtn.onclick = async () => {
   adminMsg.textContent = "Salvando...";
 
   const isEditing = !!giftId.value;
+  const editingId = isEditing ? Number(giftId.value) : null;
   const classIdNum = Number(classification_id.value);
   let priceNum = parsePriceInput(price_value.value);
 
@@ -247,7 +367,6 @@ saveGiftBtn.onclick = async () => {
   const imageUrlValue = image_url.value.trim();
   const buyUrlValue = buy_url.value.trim();
   const qtyTotalValue = Number(qty_total.value || 1);
-  const displayOrderValue = Number(display_order.value || 0);
 
   if (!classificationId) {
     adminMsg.textContent = "Selecione uma classificacao.";
@@ -279,11 +398,6 @@ saveGiftBtn.onclick = async () => {
     saveGiftBtn.disabled = false;
     return;
   }
-  if (!Number.isInteger(displayOrderValue) || displayOrderValue < 0) {
-    adminMsg.textContent = "Ordem invalida. Use numero inteiro maior ou igual a 0.";
-    saveGiftBtn.disabled = false;
-    return;
-  }
 
   const payload = {
     classification_id: classificationId,
@@ -293,28 +407,30 @@ saveGiftBtn.onclick = async () => {
     buy_url: buyUrlValue,
     price_value: priceNum,
     qty_total: qtyTotalValue,
-    display_order: displayOrderValue,
   };
 
   try {
-    if (isEditing) {
-      const { error } = await supabase
-        .from("gifts")
-        .update(payload)
-        .eq("id", Number(giftId.value));
+    if (isEditing && editingId) {
+      const { error } = await supabase.from("gifts").update(payload).eq("id", editingId);
       if (error) {
         throw error;
       }
+
+      removeDraftByKey(draftKeyFor(editingId));
+      removeDraftByKey(DRAFT_KEY_NEW);
+      clearFieldsOnly();
+      resetUrlToCreateMode();
       await loadClassifications("");
-      clearForm(true);
       adminMsg.textContent = "Item atualizado. Formulario limpo.";
     } else {
       const { error } = await supabase.from("gifts").insert(payload);
       if (error) {
         throw error;
       }
+
+      clearDraftForCurrentContext();
+      clearFieldsOnly();
       await loadClassifications("");
-      clearForm(false);
       adminMsg.textContent = "Item criado. Formulario limpo para o proximo cadastro.";
     }
   } catch (e) {
@@ -328,9 +444,14 @@ async function loadPageForSession() {
   const editId = currentEditId();
   if (editId) {
     await loadGiftForEdit(editId);
-  } else {
-    await loadClassifications("");
-    clearForm(false);
+    return;
+  }
+
+  await loadClassifications("");
+  clearFieldsOnly();
+  const restored = applyDraftToForm(readDraftByKey(DRAFT_KEY_NEW));
+  if (restored) {
+    adminMsg.textContent = "Rascunho restaurado.";
   }
 }
 
@@ -361,6 +482,8 @@ async function handleSessionChange(session2, { reloadForm = false } = {}) {
     loginMsg.textContent = `Erro ao validar admin: ${formatError(e)}`;
   }
 }
+
+watchDraftPersistence();
 
 const {
   data: { session },

@@ -68,12 +68,35 @@ function applyEditorFormat(cmd, value = null) {
   }
 }
 
+async function saveClassificationOrder(classificationId, displayOrder) {
+  const { error } = await supabase
+    .from("gift_classifications")
+    .update({ display_order: displayOrder })
+    .eq("id", classificationId);
+  if (error) {
+    throw error;
+  }
+}
+
 function renderClassificationTable() {
   classTbody.innerHTML = classifications
     .map(
       (c) => `
         <tr>
           <td>${esc(c.name)}</td>
+          <td style="min-width: 140px;">
+            <div class="d-flex gap-1 align-items-center">
+              <input
+                class="form-control form-control-sm"
+                type="number"
+                min="0"
+                step="1"
+                value="${Number(c.display_order ?? 0)}"
+                data-class-order-input="${c.id}"
+              />
+              <button class="btn btn-sm btn-outline-primary" data-save-class-order="${c.id}">OK</button>
+            </div>
+          </td>
           <td class="text-end">
             <button class="btn btn-sm btn-outline-danger" data-del-class="${c.id}">Remover</button>
           </td>
@@ -81,6 +104,31 @@ function renderClassificationTable() {
       `
     )
     .join("");
+
+  classTbody.querySelectorAll("button[data-save-class-order]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-save-class-order"));
+      const input = classTbody.querySelector(`input[data-class-order-input=\"${id}\"]`);
+      const newOrder = Number(input?.value ?? "");
+
+      if (!Number.isInteger(newOrder) || newOrder < 0) {
+        classMsg.textContent = "Ordem invalida. Use numero inteiro maior ou igual a 0.";
+        return;
+      }
+
+      btn.disabled = true;
+      classMsg.textContent = "Salvando ordem da classificacao...";
+      try {
+        await saveClassificationOrder(id, newOrder);
+        classMsg.textContent = "Ordem da classificacao salva.";
+        await loadAdminData();
+      } catch (e) {
+        classMsg.textContent = `Erro ao salvar ordem: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
 
   classTbody.querySelectorAll("button[data-del-class]").forEach((btn) => {
     btn.onclick = async () => {
@@ -143,16 +191,6 @@ async function deleteGiftAndClearReservations(giftIdToDelete) {
   }
 }
 
-async function saveDisplayOrder(giftIdToUpdate, displayOrder) {
-  const { error } = await supabase
-    .from("gifts")
-    .update({ display_order: displayOrder })
-    .eq("id", giftIdToUpdate);
-  if (error) {
-    throw error;
-  }
-}
-
 async function loadAdminData() {
   const { data: site, error: es } = await supabase
     .from("site_content")
@@ -165,48 +203,73 @@ async function loadAdminData() {
   }
   instructionsEditor.innerHTML = site?.instructions_html || "";
 
-  const { data: cls, error: ec } = await supabase
+  let cls = [];
+  let ec = null;
+  const withOrder = await supabase
     .from("gift_classifications")
-    .select("id,name")
+    .select("id,name,display_order")
+    .order("display_order", { ascending: true })
     .order("name", { ascending: true });
+
+  if (withOrder.error) {
+    const maybeMissingColumn = String(withOrder.error?.message || "").toLowerCase().includes("display_order");
+    if (maybeMissingColumn) {
+      const fallback = await supabase
+        .from("gift_classifications")
+        .select("id,name")
+        .order("name", { ascending: true });
+      cls = (fallback.data ?? []).map((c) => ({ ...c, display_order: 0 }));
+      ec = fallback.error;
+    } else {
+      ec = withOrder.error;
+    }
+  } else {
+    cls = (withOrder.data ?? []).map((c) => ({ ...c, display_order: c.display_order ?? 0 }));
+  }
 
   if (ec) {
     throw ec;
   }
-  classifications = cls ?? [];
+
+  classifications = cls;
   renderClassificationTable();
 
   let gifts = [];
   let eg = null;
-  const { data: giftsWithOrder, error: egWithOrder } = await supabase
+  const withClassOrder = await supabase
     .from("gifts_view")
     .select(
-      "id,title,price_value,is_active,display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
+      "id,title,price_value,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
     )
+    .order("classification_display_order", { ascending: true })
     .order("classification_name", { ascending: true })
-    .order("display_order", { ascending: true })
     .order("id", { ascending: true });
 
-  if (egWithOrder) {
-    const maybeMissingColumn =
-      String(egWithOrder?.code || "") === "42703" ||
-      String(egWithOrder?.message || "").toLowerCase().includes("display_order") ||
-      String(egWithOrder?.message || "").toLowerCase().includes("is_active");
+  if (withClassOrder.error) {
+    const emsg = String(withClassOrder.error?.message || "").toLowerCase();
+    const maybeMissing = emsg.includes("classification_display_order") || emsg.includes("is_active");
 
-    if (maybeMissingColumn) {
+    if (maybeMissing) {
       const fallback = await supabase
         .from("gifts_view")
         .select("id,title,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available")
         .order("classification_name", { ascending: true })
         .order("id", { ascending: true });
 
-      gifts = (fallback.data ?? []).map((g) => ({ ...g, is_active: true, display_order: 0 }));
+      gifts = (fallback.data ?? []).map((g) => ({
+        ...g,
+        is_active: true,
+        classification_display_order: 0,
+      }));
       eg = fallback.error;
     } else {
-      eg = egWithOrder;
+      eg = withClassOrder.error;
     }
   } else {
-    gifts = (giftsWithOrder ?? []).map((g) => ({ ...g, display_order: g.display_order ?? 0 }));
+    gifts = (withClassOrder.data ?? []).map((g) => ({
+      ...g,
+      classification_display_order: g.classification_display_order ?? 0,
+    }));
   }
 
   if (eg) {
@@ -220,19 +283,6 @@ async function loadAdminData() {
           <td>${g.id}</td>
           <td>${upper(g.title)}</td>
           <td>${g.classification_name ?? "-"}</td>
-          <td style="min-width: 140px;">
-            <div class="d-flex gap-1 align-items-center">
-              <input
-                class="form-control form-control-sm"
-                type="number"
-                min="0"
-                step="1"
-                value="${Number(g.display_order ?? 0)}"
-                data-order-input="${g.id}"
-              />
-              <button class="btn btn-sm btn-outline-primary" data-save-order="${g.id}">OK</button>
-            </div>
-          </td>
           <td>${formatBRL(g.price_value, "-")}</td>
           <td>${
             g.is_active === false
@@ -257,31 +307,6 @@ async function loadAdminData() {
       `
     )
     .join("");
-
-  giftsTbody.querySelectorAll("button[data-save-order]").forEach((btn) => {
-    btn.onclick = async () => {
-      const id = Number(btn.getAttribute("data-save-order"));
-      const input = giftsTbody.querySelector(`input[data-order-input=\"${id}\"]`);
-      const newOrder = Number(input?.value ?? "");
-
-      if (!Number.isInteger(newOrder) || newOrder < 0) {
-        resMsg.textContent = "Ordem invalida. Use numero inteiro maior ou igual a 0.";
-        return;
-      }
-
-      btn.disabled = true;
-      resMsg.textContent = "Salvando ordem...";
-      try {
-        await saveDisplayOrder(id, newOrder);
-        resMsg.textContent = "Ordem salva.";
-        await loadAdminData();
-      } catch (e) {
-        resMsg.textContent = `Erro ao salvar ordem: ${formatError(e)}`;
-      } finally {
-        btn.disabled = false;
-      }
-    };
-  });
 
   giftsTbody.querySelectorAll("button[data-toggle-active]").forEach((btn) => {
     btn.onclick = async () => {

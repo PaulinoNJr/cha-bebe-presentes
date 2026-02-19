@@ -99,15 +99,20 @@ function getFilteredGifts() {
     if (aFull !== bFull) {
       return aFull - bFull;
     }
+    const aClassOrder = Number.isFinite(Number(a.classification_display_order))
+      ? Number(a.classification_display_order)
+      : 0;
+    const bClassOrder = Number.isFinite(Number(b.classification_display_order))
+      ? Number(b.classification_display_order)
+      : 0;
+    if (aClassOrder !== bClassOrder) {
+      return aClassOrder - bClassOrder;
+    }
+
     const aClass = String(a.classification_name ?? "");
     const bClass = String(b.classification_name ?? "");
     if (aClass !== bClass) {
       return aClass.localeCompare(bClass, "pt-BR");
-    }
-    const aOrder = Number.isFinite(Number(a.display_order)) ? Number(a.display_order) : 0;
-    const bOrder = Number.isFinite(Number(b.display_order)) ? Number(b.display_order) : 0;
-    if (aOrder !== bOrder) {
-      return aOrder - bOrder;
     }
     return Number(a.id) - Number(b.id);
   });
@@ -206,15 +211,32 @@ async function loadAll() {
   status.textContent = "Carregando...";
 
   const siteContent = await sbFetch("/rest/v1/site_content?select=instructions_html&id=eq.1&limit=1");
-  classifications = await sbFetch("/rest/v1/gift_classifications?select=id,name&order=name.asc");
+
+  try {
+    const orderedClassifications = await sbFetch(
+      "/rest/v1/gift_classifications?select=id,name,display_order&order=display_order.asc,name.asc"
+    );
+    classifications = (orderedClassifications ?? []).map((c) => ({
+      ...c,
+      display_order: c.display_order ?? 0,
+    }));
+  } catch (e) {
+    const emsg = String(e?.message || "").toLowerCase();
+    if (!emsg.includes("display_order")) {
+      throw e;
+    }
+    classifications = await sbFetch("/rest/v1/gift_classifications?select=id,name&order=name.asc");
+  }
+
   let giftsData = [];
   try {
     giftsData = await sbFetch(
-      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,is_active,display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available&is_active=eq.true&order=classification_name.asc,display_order.asc,id.asc"
+      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available&is_active=eq.true&order=classification_display_order.asc,classification_name.asc,id.asc"
     );
   } catch (e) {
     const emsg = String(e?.message || "").toLowerCase();
-    const maybeMissingColumn = emsg.includes("is_active") || emsg.includes("display_order");
+    const maybeMissingColumn =
+      emsg.includes("is_active") || emsg.includes("classification_display_order");
     if (!maybeMissingColumn) {
       throw e;
     }
@@ -223,7 +245,10 @@ async function loadAll() {
     );
   }
   gifts = (giftsData ?? [])
-    .map((g) => ({ ...g, display_order: g.display_order ?? 0 }))
+    .map((g) => ({
+      ...g,
+      classification_display_order: g.classification_display_order ?? 0,
+    }))
     .filter((g) => g.is_active !== false);
   reservations = await sbFetch(
     "/rest/v1/gift_reservations?select=gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc"
