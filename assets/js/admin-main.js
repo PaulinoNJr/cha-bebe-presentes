@@ -1,6 +1,5 @@
 ﻿import { getSupabaseConfig, isMissingSupabaseConfig } from "./shared/config.js";
 import { esc, upper, formatBRL } from "./shared/formatters.js";
-import { parsePriceInput, detectPriceFromUrl } from "./shared/price.js";
 import { createSupabaseBrowserClient } from "./shared/supabase-client.js";
 
 const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseConfig();
@@ -25,19 +24,6 @@ const password = document.getElementById("password");
 const loginBtn = document.getElementById("loginBtn");
 const loginMsg = document.getElementById("loginMsg");
 
-const giftId = document.getElementById("giftId");
-const classification_id = document.getElementById("classification_id");
-const title = document.getElementById("title");
-const description = document.getElementById("description");
-const image_url = document.getElementById("image_url");
-const buy_url = document.getElementById("buy_url");
-const price_value = document.getElementById("price_value");
-const detectPriceBtn = document.getElementById("detectPriceBtn");
-const qty_total = document.getElementById("qty_total");
-const saveGiftBtn = document.getElementById("saveGiftBtn");
-const clearBtn = document.getElementById("clearBtn");
-const adminMsg = document.getElementById("adminMsg");
-
 const className = document.getElementById("className");
 const saveClassBtn = document.getElementById("saveClassBtn");
 const classMsg = document.getElementById("classMsg");
@@ -54,6 +40,8 @@ const addLinkBtn = document.getElementById("addLinkBtn");
 const foreColorPicker = document.getElementById("foreColorPicker");
 const hiliteColorPicker = document.getElementById("hiliteColorPicker");
 
+let classifications = [];
+
 function formatError(err) {
   const msg = String(err?.message || err || "Erro inesperado");
   if (msg.includes("row-level security")) {
@@ -65,7 +53,7 @@ function formatError(err) {
   if (msg.toLowerCase().includes("email not confirmed")) {
     return "Email nao confirmado no Supabase Auth.";
   }
-  if (msg.toLowerCase().includes("is_active")) {
+  if (msg.toLowerCase().includes("is_active") || msg.toLowerCase().includes("display_order")) {
     return "Banco desatualizado. Execute o supabase-setup.sql mais recente.";
   }
   return msg;
@@ -77,20 +65,6 @@ function applyEditorFormat(cmd, value = null) {
     document.execCommand("formatBlock", false, value || "p");
   } else {
     document.execCommand(cmd, false, value);
-  }
-}
-
-let classifications = [];
-
-function renderClassificationOptions(selected = "") {
-  classification_id.innerHTML =
-    '<option value="">Selecione a classificacao</option>' +
-    classifications.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
-
-  if (selected !== "" && selected !== null && selected !== undefined) {
-    classification_id.value = String(selected);
-  } else {
-    classification_id.value = "";
   }
 }
 
@@ -127,33 +101,6 @@ function renderClassificationTable() {
   });
 }
 
-document.querySelectorAll("[data-format]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const cmd = btn.getAttribute("data-format");
-    const value = btn.getAttribute("data-value");
-    if (cmd) {
-      applyEditorFormat(cmd, value);
-    }
-  });
-});
-
-addLinkBtn.addEventListener("click", () => {
-  const url = prompt("Informe a URL do link:");
-  if (!url) {
-    return;
-  }
-  instructionsEditor.focus();
-  document.execCommand("createLink", false, url.trim());
-});
-
-foreColorPicker.addEventListener("change", () => {
-  applyEditorFormat("foreColor", foreColorPicker.value);
-});
-
-hiliteColorPicker.addEventListener("change", () => {
-  applyEditorFormat("hiliteColor", hiliteColorPicker.value);
-});
-
 async function ensureAdminPermission() {
   const { data, error } = await supabase.rpc("is_admin");
   if (error) {
@@ -166,27 +113,6 @@ function setLoggedIn(logged) {
   loginCard.classList.toggle("d-none", logged);
   adminArea.classList.toggle("d-none", !logged);
   logoutBtn.classList.toggle("d-none", !logged);
-}
-
-function clearForm() {
-  giftId.value = "";
-  classification_id.value = "";
-  title.value = "";
-  description.value = "";
-  image_url.value = "";
-  buy_url.value = "";
-  price_value.value = "";
-  qty_total.value = 1;
-  adminMsg.textContent = "";
-}
-
-function isValidHttpUrl(value) {
-  try {
-    const u = new URL(String(value ?? "").trim());
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 async function clearGiftReservations(giftIdToClear) {
@@ -209,14 +135,19 @@ async function setGiftActiveState(giftIdToUpdate, isActive) {
   }
 }
 
-async function deactivateGiftAndClearReservations(giftIdToDeactivate) {
-  await setGiftActiveState(giftIdToDeactivate, false);
-  await clearGiftReservations(giftIdToDeactivate);
-}
-
 async function deleteGiftAndClearReservations(giftIdToDelete) {
   await clearGiftReservations(giftIdToDelete);
   const { error } = await supabase.from("gifts").delete().eq("id", giftIdToDelete);
+  if (error) {
+    throw error;
+  }
+}
+
+async function saveDisplayOrder(giftIdToUpdate, displayOrder) {
+  const { error } = await supabase
+    .from("gifts")
+    .update({ display_order: displayOrder })
+    .eq("id", giftIdToUpdate);
   if (error) {
     throw error;
   }
@@ -243,36 +174,39 @@ async function loadAdminData() {
     throw ec;
   }
   classifications = cls ?? [];
-  renderClassificationOptions();
   renderClassificationTable();
 
   let gifts = [];
   let eg = null;
-  const { data: giftsWithActive, error: egWithActive } = await supabase
+  const { data: giftsWithOrder, error: egWithOrder } = await supabase
     .from("gifts_view")
     .select(
-      "id,title,price_value,is_active,classification_id,classification_name,qty_total,qty_reserved,qty_available"
+      "id,title,price_value,is_active,display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
     )
+    .order("classification_name", { ascending: true })
+    .order("display_order", { ascending: true })
     .order("id", { ascending: true });
 
-  if (egWithActive) {
+  if (egWithOrder) {
     const maybeMissingColumn =
-      String(egWithActive?.code || "") === "42703" ||
-      String(egWithActive?.message || "").toLowerCase().includes("is_active");
+      String(egWithOrder?.code || "") === "42703" ||
+      String(egWithOrder?.message || "").toLowerCase().includes("display_order") ||
+      String(egWithOrder?.message || "").toLowerCase().includes("is_active");
 
     if (maybeMissingColumn) {
       const fallback = await supabase
         .from("gifts_view")
         .select("id,title,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available")
+        .order("classification_name", { ascending: true })
         .order("id", { ascending: true });
 
-      gifts = (fallback.data ?? []).map((g) => ({ ...g, is_active: true }));
+      gifts = (fallback.data ?? []).map((g) => ({ ...g, is_active: true, display_order: 0 }));
       eg = fallback.error;
     } else {
-      eg = egWithActive;
+      eg = egWithOrder;
     }
   } else {
-    gifts = giftsWithActive ?? [];
+    gifts = (giftsWithOrder ?? []).map((g) => ({ ...g, display_order: g.display_order ?? 0 }));
   }
 
   if (eg) {
@@ -286,14 +220,31 @@ async function loadAdminData() {
           <td>${g.id}</td>
           <td>${upper(g.title)}</td>
           <td>${g.classification_name ?? "-"}</td>
+          <td style="min-width: 140px;">
+            <div class="d-flex gap-1 align-items-center">
+              <input
+                class="form-control form-control-sm"
+                type="number"
+                min="0"
+                step="1"
+                value="${Number(g.display_order ?? 0)}"
+                data-order-input="${g.id}"
+              />
+              <button class="btn btn-sm btn-outline-primary" data-save-order="${g.id}">OK</button>
+            </div>
+          </td>
           <td>${formatBRL(g.price_value, "-")}</td>
-          <td>${g.is_active === false ? '<span class="badge text-bg-secondary">INATIVO</span>' : '<span class="badge text-bg-success">ATIVO</span>'}</td>
+          <td>${
+            g.is_active === false
+              ? '<span class="badge text-bg-secondary">INATIVO</span>'
+              : '<span class="badge text-bg-success">ATIVO</span>'
+          }</td>
           <td>${g.qty_total}</td>
           <td>${g.qty_reserved}</td>
           <td>${g.qty_available}</td>
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end flex-wrap">
-              <button class="btn btn-sm btn-outline-secondary" data-edit="${g.id}">Editar</button>
+              <a class="btn btn-sm btn-outline-secondary" href="./admin-item.html?id=${g.id}">Editar</a>
               <button
                 class="btn btn-sm ${g.is_active === false ? "btn-outline-success" : "btn-outline-warning"}"
                 data-toggle-active="${g.id}"
@@ -307,26 +258,28 @@ async function loadAdminData() {
     )
     .join("");
 
-  giftsTbody.querySelectorAll("button[data-edit]").forEach((btn) => {
+  giftsTbody.querySelectorAll("button[data-save-order]").forEach((btn) => {
     btn.onclick = async () => {
-      const id = Number(btn.getAttribute("data-edit"));
-      const { data, error } = await supabase.from("gifts").select("*").eq("id", id).single();
-      if (error) {
+      const id = Number(btn.getAttribute("data-save-order"));
+      const input = giftsTbody.querySelector(`input[data-order-input=\"${id}\"]`);
+      const newOrder = Number(input?.value ?? "");
+
+      if (!Number.isInteger(newOrder) || newOrder < 0) {
+        resMsg.textContent = "Ordem invalida. Use numero inteiro maior ou igual a 0.";
         return;
       }
 
-      giftId.value = data.id;
-      title.value = upper(data.title);
-      description.value = data.description ?? "";
-      image_url.value = data.image_url ?? "";
-      buy_url.value = data.buy_url ?? "";
-      price_value.value =
-        data.price_value === null || data.price_value === undefined
-          ? ""
-          : String(data.price_value);
-      qty_total.value = data.qty_total ?? 1;
-      renderClassificationOptions(data.classification_id ?? "");
-      adminMsg.textContent = `Editando presente #${data.id}${data.is_active === false ? " (INATIVO)" : ""}`;
+      btn.disabled = true;
+      resMsg.textContent = "Salvando ordem...";
+      try {
+        await saveDisplayOrder(id, newOrder);
+        resMsg.textContent = "Ordem salva.";
+        await loadAdminData();
+      } catch (e) {
+        resMsg.textContent = `Erro ao salvar ordem: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
     };
   });
 
@@ -343,21 +296,20 @@ async function loadAdminData() {
       }
 
       btn.disabled = true;
-      adminMsg.textContent = nextActive
-        ? "Ativando presente..."
-        : "Desativando presente e limpando reservas...";
+      resMsg.textContent = nextActive ? "Ativando presente..." : "Desativando presente e limpando reservas...";
 
       try {
         if (nextActive) {
           await setGiftActiveState(id, true);
-          adminMsg.textContent = "Presente ativado.";
+          resMsg.textContent = "Presente ativado.";
         } else {
-          await deactivateGiftAndClearReservations(id);
-          adminMsg.textContent = "Presente desativado e reservas removidas.";
+          await setGiftActiveState(id, false);
+          await clearGiftReservations(id);
+          resMsg.textContent = "Presente desativado e reservas removidas.";
         }
         await loadAdminData();
       } catch (e) {
-        adminMsg.textContent = `Erro ao alterar status: ${formatError(e)}`;
+        resMsg.textContent = `Erro ao alterar status: ${formatError(e)}`;
       } finally {
         btn.disabled = false;
       }
@@ -372,16 +324,13 @@ async function loadAdminData() {
       }
 
       btn.disabled = true;
-      adminMsg.textContent = "Excluindo presente...";
+      resMsg.textContent = "Excluindo presente...";
       try {
         await deleteGiftAndClearReservations(id);
-        if (Number(giftId.value || 0) === id) {
-          clearForm();
-        }
-        adminMsg.textContent = "Presente excluido e reservas removidas.";
+        resMsg.textContent = "Presente excluido e reservas removidas.";
         await loadAdminData();
       } catch (e) {
-        adminMsg.textContent = `Erro ao excluir: ${formatError(e)}`;
+        resMsg.textContent = `Erro ao excluir: ${formatError(e)}`;
       } finally {
         btn.disabled = false;
       }
@@ -431,8 +380,37 @@ async function loadAdminData() {
     };
   });
 
-  resMsg.textContent = "Mostrando ate 200 reservas recentes.";
+  if (!resMsg.textContent) {
+    resMsg.textContent = "Mostrando ate 200 reservas recentes.";
+  }
 }
+
+document.querySelectorAll("[data-format]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const cmd = btn.getAttribute("data-format");
+    const value = btn.getAttribute("data-value");
+    if (cmd) {
+      applyEditorFormat(cmd, value);
+    }
+  });
+});
+
+addLinkBtn.addEventListener("click", () => {
+  const url = prompt("Informe a URL do link:");
+  if (!url) {
+    return;
+  }
+  instructionsEditor.focus();
+  document.execCommand("createLink", false, url.trim());
+});
+
+foreColorPicker.addEventListener("change", () => {
+  applyEditorFormat("foreColor", foreColorPicker.value);
+});
+
+hiliteColorPicker.addEventListener("change", () => {
+  applyEditorFormat("hiliteColor", hiliteColorPicker.value);
+});
 
 loginBtn.onclick = async () => {
   loginBtn.disabled = true;
@@ -457,7 +435,6 @@ loginBtn.onclick = async () => {
 logoutBtn.onclick = async () => {
   await supabase.auth.signOut();
   setLoggedIn(false);
-  clearForm();
 };
 
 saveClassBtn.onclick = async () => {
@@ -506,151 +483,6 @@ saveInstructionsBtn.onclick = async () => {
   }
 };
 
-detectPriceBtn.onclick = async () => {
-  detectPriceBtn.disabled = true;
-  adminMsg.textContent = "Buscando valor no link...";
-  try {
-    const detected = await detectPriceFromUrl(buy_url.value);
-    if (detected === null) {
-      adminMsg.textContent = "Nao foi possivel identificar o valor neste link.";
-    } else {
-      price_value.value = String(detected.toFixed(2));
-      adminMsg.textContent = `Valor detectado: ${formatBRL(detected)}.`;
-    }
-  } catch (e) {
-    adminMsg.textContent = `Erro ao capturar valor: ${formatError(e)}`;
-  } finally {
-    detectPriceBtn.disabled = false;
-  }
-};
-
-buy_url.addEventListener("blur", async () => {
-  if (!buy_url.value.trim() || price_value.value.trim()) {
-    return;
-  }
-  try {
-    const detected = await detectPriceFromUrl(buy_url.value);
-    if (detected !== null) {
-      price_value.value = String(detected.toFixed(2));
-    }
-  } catch {
-    // Falha silenciosa no blur para nao interromper o fluxo do formulario.
-  }
-});
-
-saveGiftBtn.onclick = async () => {
-  saveGiftBtn.disabled = true;
-  adminMsg.textContent = "Salvando...";
-  const isEditing = !!giftId.value;
-  const classIdNum = Number(classification_id.value);
-  let priceNum = parsePriceInput(price_value.value);
-
-  try {
-    if (buy_url.value.trim()) {
-      adminMsg.textContent = "Capturando valor pelo link...";
-      const detected = await detectPriceFromUrl(buy_url.value);
-      if (detected !== null) {
-        priceNum = detected;
-        price_value.value = String(priceNum.toFixed(2));
-      }
-    }
-  } catch {
-    // Falha de rede/proxy; validacao abaixo decide se pode salvar.
-  }
-
-  const classificationId = Number.isInteger(classIdNum) && classIdNum > 0 ? classIdNum : null;
-  const titleValue = upper(title.value);
-  const descriptionValue = description.value.trim() || null;
-  const imageUrlValue = image_url.value.trim();
-  const buyUrlValue = buy_url.value.trim();
-  const qtyTotalValue = Number(qty_total.value || 1);
-
-  if (!classificationId) {
-    adminMsg.textContent = "Selecione uma classificacao.";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-  if (!titleValue) {
-    adminMsg.textContent = "Informe o titulo.";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-  if (!imageUrlValue) {
-    adminMsg.textContent = "Informe a URL da imagem.";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-  if (!isValidHttpUrl(imageUrlValue)) {
-    adminMsg.textContent = "URL da imagem invalida. Use http(s)://...";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-  if (!buyUrlValue) {
-    adminMsg.textContent = "Informe o link de compra.";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-  if (!isValidHttpUrl(buyUrlValue)) {
-    adminMsg.textContent = "Link de compra invalido. Use http(s)://...";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-  if (priceNum === null) {
-    adminMsg.textContent = "Informe o valor do item.";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-  if (!Number.isInteger(qtyTotalValue) || qtyTotalValue < 1) {
-    adminMsg.textContent = "Quantidade total invalida.";
-    saveGiftBtn.disabled = false;
-    return;
-  }
-
-  const payload = {
-    classification_id: classificationId,
-    title: titleValue,
-    description: descriptionValue,
-    image_url: imageUrlValue,
-    buy_url: buyUrlValue,
-    price_value: priceNum,
-    qty_total: qtyTotalValue,
-  };
-
-  try {
-    if (isEditing) {
-      const { error } = await supabase
-        .from("gifts")
-        .update(payload)
-        .eq("id", Number(giftId.value));
-      if (error) {
-        throw error;
-      }
-      adminMsg.textContent = "Atualizado.";
-    } else {
-      const { error } = await supabase.from("gifts").insert(payload);
-      if (error) {
-        throw error;
-      }
-      adminMsg.textContent = "Criado.";
-    }
-
-    try {
-      await loadAdminData();
-      if (!isEditing) {
-        clearForm();
-        adminMsg.textContent = "Criado. Formulario limpo para o proximo item.";
-      }
-    } catch (e) {
-      adminMsg.textContent = `Salvou, mas falhou ao recarregar: ${formatError(e)}`;
-    }
-  } catch (e) {
-    adminMsg.textContent = `Erro ao salvar: ${formatError(e)}`;
-  } finally {
-    saveGiftBtn.disabled = false;
-  }
-};
-
-clearBtn.onclick = clearForm;
 refreshBtn.onclick = async () => {
   try {
     await loadAdminData();

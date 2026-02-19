@@ -99,7 +99,17 @@ function getFilteredGifts() {
     if (aFull !== bFull) {
       return aFull - bFull;
     }
-    return a.id - b.id;
+    const aClass = String(a.classification_name ?? "");
+    const bClass = String(b.classification_name ?? "");
+    if (aClass !== bClass) {
+      return aClass.localeCompare(bClass, "pt-BR");
+    }
+    const aOrder = Number.isFinite(Number(a.display_order)) ? Number(a.display_order) : 0;
+    const bOrder = Number.isFinite(Number(b.display_order)) ? Number(b.display_order) : 0;
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    return Number(a.id) - Number(b.id);
   });
 }
 
@@ -200,18 +210,21 @@ async function loadAll() {
   let giftsData = [];
   try {
     giftsData = await sbFetch(
-      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,is_active,classification_id,classification_name,qty_total,qty_reserved,qty_available&is_active=eq.true&order=id.asc"
+      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,is_active,display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available&is_active=eq.true&order=classification_name.asc,display_order.asc,id.asc"
     );
   } catch (e) {
-    const maybeMissingColumn = String(e?.message || "").toLowerCase().includes("is_active");
+    const emsg = String(e?.message || "").toLowerCase();
+    const maybeMissingColumn = emsg.includes("is_active") || emsg.includes("display_order");
     if (!maybeMissingColumn) {
       throw e;
     }
     giftsData = await sbFetch(
-      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=id.asc"
+      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=classification_name.asc,id.asc"
     );
   }
-  gifts = (giftsData ?? []).filter((g) => g.is_active !== false);
+  gifts = (giftsData ?? [])
+    .map((g) => ({ ...g, display_order: g.display_order ?? 0 }))
+    .filter((g) => g.is_active !== false);
   reservations = await sbFetch(
     "/rest/v1/gift_reservations?select=gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc"
   );

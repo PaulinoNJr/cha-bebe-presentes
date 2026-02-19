@@ -13,6 +13,7 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h1 class="h4 mb-0">Admin - Chá da Melissa (Mel)</h1>
       <div class="d-flex gap-2">
+        <a href="./admin-item.html" class="btn btn-primary btn-sm">Novo item</a>
         <a href="./index.html" class="btn btn-outline-primary btn-sm">Ver lista</a>
         <button id="logoutBtn" class="btn btn-outline-secondary btn-sm d-none">Sair</button>
       </div>
@@ -104,57 +105,13 @@
 
           <div class="card shadow-sm">
             <div class="card-body">
-              <h2 class="h6">Novo/Editar Presente</h2>
-
-              <input type="hidden" id="giftId">
-
-              <div class="mb-2">
-                <label class="form-label">Classificação</label>
-                <select id="classification_id" class="form-select" required>
-                  <option value="">Selecione a classificação</option>
-                </select>
-              </div>
-
-              <div class="mb-2">
-                <label class="form-label">Título</label>
-                <input id="title" class="form-control text-uppercase" placeholder="Ex: FRALDA P" required />
-              </div>
-
-              <div class="mb-2">
-                <label class="form-label">Descrição</label>
-                <textarea id="description" class="form-control" rows="2"></textarea>
-              </div>
-
-              <div class="mb-2">
-                <label class="form-label">Imagem (URL)</label>
-                <input id="image_url" class="form-control" placeholder="https://..." required />
-              </div>
-
-              <div class="mb-2">
-                <label class="form-label">Link compra (URL)</label>
-                <input id="buy_url" class="form-control" placeholder="https://..." required />
-              </div>
-
-              <div class="mb-2">
-                <label class="form-label">Valor (R$)</label>
-                <div class="input-group">
-                  <input id="price_value" class="form-control" placeholder="Auto pelo link (editável)" required />
-                  <button id="detectPriceBtn" class="btn btn-outline-secondary" type="button">Capturar valor</button>
-                </div>
-                <div class="form-text">Ao informar link de compra, tente capturar o valor.</div>
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Quantidade total</label>
-                <input id="qty_total" class="form-control" type="number" min="1" value="1" required />
-              </div>
-
+              <h2 class="h6">Cadastro de Itens</h2>
+              <p class="small text-muted mb-3">
+                O cadastro e edição de itens agora ficam em uma subpágina dedicada.
+              </p>
               <div class="d-flex gap-2">
-                <button id="saveGiftBtn" class="btn btn-primary">Salvar</button>
-                <button id="clearBtn" class="btn btn-outline-secondary">Limpar</button>
+                <a href="./admin-item.html" class="btn btn-primary btn-sm">Cadastrar novo item</a>
               </div>
-
-              <div id="adminMsg" class="small text-muted mt-2"></div>
             </div>
           </div>
         </div>
@@ -174,6 +131,7 @@
                       <th>#</th>
                       <th>Título</th>
                       <th>Classificação</th>
+                      <th>Ordem</th>
                       <th>Valor</th>
                       <th>Status</th>
                       <th>Total</th>
@@ -216,7 +174,7 @@
   <script src="./supabase-config.js"></script>
 
   <!-- supabase-js via ESM CDN -->
-  <script type="module" src="./assets/js/admin.js"></script>
+  <script type="module" src="./assets/js/admin-main.js"></script>
 </body>
 </html>
 
