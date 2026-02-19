@@ -68,10 +68,10 @@ function applyEditorFormat(cmd, value = null) {
   }
 }
 
-async function saveClassificationOrder(classificationId, displayOrder) {
+async function saveClassification(classificationId, payload) {
   const { error } = await supabase
     .from("gift_classifications")
-    .update({ display_order: displayOrder })
+    .update(payload)
     .eq("id", classificationId);
   if (error) {
     throw error;
@@ -83,7 +83,15 @@ function renderClassificationTable() {
     .map(
       (c) => `
         <tr>
-          <td>${esc(c.name)}</td>
+          <td style="min-width: 200px;">
+            <input
+              class="form-control form-control-sm"
+              type="text"
+              minlength="2"
+              value="${esc(c.name)}"
+              data-class-name-input="${c.id}"
+            />
+          </td>
           <td style="min-width: 140px;">
             <div class="d-flex gap-1 align-items-center">
               <input
@@ -94,10 +102,10 @@ function renderClassificationTable() {
                 value="${Number(c.display_order ?? 0)}"
                 data-class-order-input="${c.id}"
               />
-              <button class="btn btn-sm btn-outline-primary" data-save-class-order="${c.id}">OK</button>
             </div>
           </td>
-          <td class="text-end">
+          <td class="text-end d-flex gap-1 justify-content-end">
+            <button class="btn btn-sm btn-outline-primary" data-save-class="${c.id}">Salvar</button>
             <button class="btn btn-sm btn-outline-danger" data-del-class="${c.id}">Remover</button>
           </td>
         </tr>
@@ -105,25 +113,31 @@ function renderClassificationTable() {
     )
     .join("");
 
-  classTbody.querySelectorAll("button[data-save-class-order]").forEach((btn) => {
+  classTbody.querySelectorAll("button[data-save-class]").forEach((btn) => {
     btn.onclick = async () => {
-      const id = Number(btn.getAttribute("data-save-class-order"));
-      const input = classTbody.querySelector(`input[data-class-order-input=\"${id}\"]`);
-      const newOrder = Number(input?.value ?? "");
+      const id = Number(btn.getAttribute("data-save-class"));
+      const nameInput = classTbody.querySelector(`input[data-class-name-input=\"${id}\"]`);
+      const orderInput = classTbody.querySelector(`input[data-class-order-input=\"${id}\"]`);
+      const newName = String(nameInput?.value ?? "").trim();
+      const newOrder = Number(orderInput?.value ?? "");
 
+      if (newName.length < 2) {
+        classMsg.textContent = "Nome invalido. Use pelo menos 2 caracteres.";
+        return;
+      }
       if (!Number.isInteger(newOrder) || newOrder < 0) {
         classMsg.textContent = "Ordem invalida. Use numero inteiro maior ou igual a 0.";
         return;
       }
 
       btn.disabled = true;
-      classMsg.textContent = "Salvando ordem da classificacao...";
+      classMsg.textContent = "Salvando classificacao...";
       try {
-        await saveClassificationOrder(id, newOrder);
-        classMsg.textContent = "Ordem da classificacao salva.";
+        await saveClassification(id, { name: newName, display_order: newOrder });
+        classMsg.textContent = "Classificacao atualizada.";
         await loadAdminData();
       } catch (e) {
-        classMsg.textContent = `Erro ao salvar ordem: ${formatError(e)}`;
+        classMsg.textContent = `Erro ao salvar classificacao: ${formatError(e)}`;
       } finally {
         btn.disabled = false;
       }
