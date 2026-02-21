@@ -101,3 +101,7 @@ h1 {
 .gift-actions-menu:not([open]) .gift-actions-list {
   display: none;
 }
+
+.gift-row-updating td {
+  background: #fff6dc !important;
+}

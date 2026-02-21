@@ -1,4 +1,4 @@
-﻿name: Price Worker (cron)
+name: Price Worker (manual)
 
 on:
   workflow_dispatch:
@@ -15,6 +15,9 @@ on:
 jobs:
   run-worker:
     runs-on: ubuntu-latest
+    concurrency:
+      group: price-worker-manual
+      cancel-in-progress: false
     permissions:
       contents: read
 

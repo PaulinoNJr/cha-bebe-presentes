@@ -220,12 +220,65 @@ async function setGiftActiveState(giftIdToUpdate, isActive) {
   }
 }
 
+async function updateGiftPriceNow(giftIdToUpdate, buyUrl) {
+  const normalizedUrl = String(buyUrl || "").trim();
+  if (!normalizedUrl) {
+    throw new Error("Este item nao possui link de compra.");
+  }
+
+  const detectedPrice = await detectPriceFromUrl(normalizedUrl, 12000);
+  if (detectedPrice === null) {
+    throw new Error("Nao foi possivel detectar o preco nesse link.");
+  }
+
+  const { error } = await supabase
+    .from("gifts")
+    .update({ price_value: detectedPrice })
+    .eq("id", giftIdToUpdate);
+  if (error) {
+    throw error;
+  }
+
+  return detectedPrice;
+}
+
 async function deleteGiftAndClearReservations(giftIdToDelete) {
   await clearGiftReservations(giftIdToDelete);
   const { error } = await supabase.from("gifts").delete().eq("id", giftIdToDelete);
   if (error) {
     throw error;
   }
+}
+
+async function hydrateGiftBuyUrls(gifts) {
+  const base = Array.isArray(gifts) ? gifts : [];
+  const idsWithoutUrl = base
+    .filter((g) => g && !String(g.buy_url || "").trim())
+    .map((g) => Number(g.id))
+    .filter((id) => Number.isFinite(id));
+
+  if (!idsWithoutUrl.length) {
+    return base;
+  }
+
+  const { data, error } = await supabase
+    .from("gifts")
+    .select("id,buy_url")
+    .in("id", idsWithoutUrl);
+
+  if (error) {
+    return base;
+  }
+
+  const byId = new Map((data || []).map((row) => [Number(row.id), String(row.buy_url || "")]));
+  return base.map((g) => {
+    const id = Number(g.id);
+    const buyUrl = String(g.buy_url || "").trim();
+    if (buyUrl) {
+      return g;
+    }
+    return { ...g, buy_url: byId.get(id) || "" };
+  });
 }
 
 function setPriceQueueMessage(msg) {
@@ -656,11 +709,11 @@ function renderGiftsTable() {
   giftsTbody.innerHTML = gifts
     .map(
       (g) => `
-        <tr>
+        <tr data-gift-row-id="${g.id}">
           <td>${g.id}</td>
           <td class="gift-title-cell">${esc(upper(g.title || ""))}</td>
           <td class="gift-class-cell">${esc(g.classification_name || "-")}</td>
-          <td>${formatBRL(g.price_value, "-")}</td>
+          <td data-gift-price-cell="${g.id}">${formatBRL(g.price_value, "-")}</td>
           <td>${
             g.is_active === false
               ? '<span class="badge text-bg-secondary">INATIVO</span>'
@@ -674,6 +727,11 @@ function renderGiftsTable() {
               <summary class="btn btn-sm btn-outline-secondary">Ações</summary>
               <div class="gift-actions-list">
                 <a class="btn btn-sm btn-outline-secondary w-100" href="./admin-item.html?id=${g.id}">Editar</a>
+                <button
+                  class="btn btn-sm btn-outline-info w-100"
+                  data-refresh-price="${g.id}"
+                  data-refresh-buy-url="${esc(g.buy_url || "")}"
+                >Atualizar preco</button>
                 <button
                   class="btn btn-sm ${g.is_active === false ? "btn-outline-success" : "btn-outline-warning"} w-100"
                   data-toggle-active="${g.id}"
@@ -690,6 +748,7 @@ function renderGiftsTable() {
 
   giftsTbody.querySelectorAll("button[data-toggle-active]").forEach((btn) => {
     btn.onclick = async () => {
+      const details = btn.closest("details");
       const id = Number(btn.getAttribute("data-toggle-active"));
       const nextActive = btn.getAttribute("data-next-active") === "true";
       const confirmMsg = nextActive
@@ -713,6 +772,9 @@ function renderGiftsTable() {
           resMsg.textContent = "Presente desativado e reservas removidas.";
         }
         await loadAdminData();
+        if (details) {
+          details.open = false;
+        }
       } catch (e) {
         resMsg.textContent = `Erro ao alterar status: ${formatError(e)}`;
       } finally {
@@ -721,8 +783,42 @@ function renderGiftsTable() {
     };
   });
 
+  giftsTbody.querySelectorAll("button[data-refresh-price]").forEach((btn) => {
+    btn.onclick = async () => {
+      const details = btn.closest("details");
+      const id = Number(btn.getAttribute("data-refresh-price"));
+      const buyUrl = String(btn.getAttribute("data-refresh-buy-url") || "").trim();
+      const row = giftsTbody.querySelector(`tr[data-gift-row-id="${id}"]`);
+      const priceCell = giftsTbody.querySelector(`td[data-gift-price-cell="${id}"]`);
+      const originalText = btn.textContent;
+
+      btn.disabled = true;
+      btn.textContent = "Atualizando...";
+      row?.classList.add("gift-row-updating");
+      resMsg.textContent = "Atualizando preco do item...";
+      try {
+        const detectedPrice = await updateGiftPriceNow(id, buyUrl);
+        if (priceCell) {
+          priceCell.textContent = formatBRL(detectedPrice, "-");
+        }
+        resMsg.textContent = `Preco atualizado: ${formatBRL(detectedPrice, "-")}.`;
+        await loadAdminData();
+        if (details) {
+          details.open = false;
+        }
+      } catch (e) {
+        resMsg.textContent = `Erro ao atualizar preco: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText || "Atualizar preco";
+        row?.classList.remove("gift-row-updating");
+      }
+    };
+  });
+
   giftsTbody.querySelectorAll("button[data-delete-gift]").forEach((btn) => {
     btn.onclick = async () => {
+      const details = btn.closest("details");
       const id = Number(btn.getAttribute("data-delete-gift"));
       if (!confirm("Excluir este presente? As reservas dele tambem serao removidas.")) {
         return;
@@ -734,6 +830,9 @@ function renderGiftsTable() {
         await deleteGiftAndClearReservations(id);
         resMsg.textContent = "Presente excluido e reservas removidas.";
         await loadAdminData();
+        if (details) {
+          details.open = false;
+        }
       } catch (e) {
         resMsg.textContent = `Erro ao excluir: ${formatError(e)}`;
       } finally {
@@ -791,7 +890,7 @@ async function loadAdminData() {
   const withClassOrder = await supabase
     .from("gifts_view")
     .select(
-      "id,title,price_value,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
+      "id,title,buy_url,price_value,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
     )
     .order("classification_display_order", { ascending: true })
     .order("classification_name", { ascending: true })
@@ -799,7 +898,8 @@ async function loadAdminData() {
 
   if (withClassOrder.error) {
     const emsg = String(withClassOrder.error?.message || "").toLowerCase();
-    const maybeMissing = emsg.includes("classification_display_order") || emsg.includes("is_active");
+    const maybeMissing =
+      emsg.includes("classification_display_order") || emsg.includes("is_active") || emsg.includes("buy_url");
 
     if (maybeMissing) {
       const fallback = await supabase
@@ -812,6 +912,7 @@ async function loadAdminData() {
         ...g,
         is_active: true,
         classification_display_order: 0,
+        buy_url: "",
       }));
       eg = fallback.error;
     } else {
@@ -828,7 +929,7 @@ async function loadAdminData() {
     throw eg;
   }
 
-  giftsCache = gifts;
+  giftsCache = await hydrateGiftBuyUrls(gifts);
   renderGiftFilterOptions();
   renderGiftsTable();
   await loadPriceQueuePanel();
