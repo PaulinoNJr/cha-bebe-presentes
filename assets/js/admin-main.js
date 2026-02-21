@@ -1,5 +1,6 @@
 ﻿import { getSupabaseConfig, isMissingSupabaseConfig } from "./shared/config.js";
 import { esc, upper, formatBRL } from "./shared/formatters.js";
+import { detectPriceFromUrl } from "./shared/price.js";
 import { createSupabaseBrowserClient } from "./shared/supabase-client.js";
 
 const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseConfig();
@@ -32,6 +33,13 @@ const classTbody = document.getElementById("classTbody");
 const giftsTbody = document.getElementById("giftsTbody");
 const giftCategoryFilter = document.getElementById("giftCategoryFilter");
 const giftsFilterInfo = document.getElementById("giftsFilterInfo");
+const priceScheduleSelect = document.getElementById("priceScheduleSelect");
+const savePriceScheduleBtn = document.getElementById("savePriceScheduleBtn");
+const enqueueAllPricesBtn = document.getElementById("enqueueAllPricesBtn");
+const runDueScheduleBtn = document.getElementById("runDueScheduleBtn");
+const processQueueNowBtn = document.getElementById("processQueueNowBtn");
+const priceQueueMsg = document.getElementById("priceQueueMsg");
+const priceQueueTbody = document.getElementById("priceQueueTbody");
 const resTbody = document.getElementById("resTbody");
 const refreshBtn = document.getElementById("refreshBtn");
 const resMsg = document.getElementById("resMsg");
@@ -44,6 +52,7 @@ const hiliteColorPicker = document.getElementById("hiliteColorPicker");
 
 let classifications = [];
 let giftsCache = [];
+let hasPriceQueueFeature = true;
 
 function formatError(err) {
   const msg = String(err?.message || err || "Erro inesperado");
@@ -56,7 +65,14 @@ function formatError(err) {
   if (msg.toLowerCase().includes("email not confirmed")) {
     return "Email nao confirmado no Supabase Auth.";
   }
-  if (msg.toLowerCase().includes("is_active") || msg.toLowerCase().includes("display_order")) {
+  if (msg.includes("NOT_ADMIN")) {
+    return "Somente usuarios admin podem executar esta acao.";
+  }
+  if (
+    msg.toLowerCase().includes("is_active") ||
+    msg.toLowerCase().includes("display_order") ||
+    msg.toLowerCase().includes("price_update_")
+  ) {
     return "Banco desatualizado. Execute o supabase-setup.sql mais recente.";
   }
   return msg;
@@ -205,6 +221,320 @@ async function deleteGiftAndClearReservations(giftIdToDelete) {
   const { error } = await supabase.from("gifts").delete().eq("id", giftIdToDelete);
   if (error) {
     throw error;
+  }
+}
+
+function setPriceQueueMessage(msg) {
+  if (priceQueueMsg) {
+    priceQueueMsg.textContent = msg;
+  }
+}
+
+function isMissingPriceQueueFeatureError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return msg.includes("price_update_") || msg.includes("does not exist");
+}
+
+function setPriceQueueControlsEnabled(enabled) {
+  [priceScheduleSelect, savePriceScheduleBtn, enqueueAllPricesBtn, runDueScheduleBtn, processQueueNowBtn]
+    .filter(Boolean)
+    .forEach((el) => {
+      el.disabled = !enabled;
+    });
+}
+
+function formatQueueTime(value) {
+  if (!value) {
+    return "-";
+  }
+  try {
+    return new Date(value).toLocaleString("pt-BR");
+  } catch {
+    return "-";
+  }
+}
+
+function normalizeScheduleSelectValue(settingsRow) {
+  if (!settingsRow || settingsRow.is_enabled === false) {
+    return "off";
+  }
+  const freq = Number(settingsRow.frequency_minutes || 0);
+  return Number.isFinite(freq) && freq >= 60 ? String(freq) : "1440";
+}
+
+function setScheduleSelectValue(value) {
+  if (!priceScheduleSelect) {
+    return;
+  }
+
+  const stringValue = String(value ?? "off");
+  const hasOption = Array.from(priceScheduleSelect.options).some((opt) => opt.value === stringValue);
+  if (!hasOption && stringValue !== "off") {
+    const customOption = document.createElement("option");
+    customOption.value = stringValue;
+    customOption.textContent = `Personalizado (${stringValue} min)`;
+    priceScheduleSelect.appendChild(customOption);
+  }
+
+  priceScheduleSelect.value = stringValue;
+}
+
+async function savePriceSchedule() {
+  if (!hasPriceQueueFeature) {
+    return;
+  }
+
+  const selected = String(priceScheduleSelect?.value || "off");
+  const enabled = selected !== "off";
+  const frequency = enabled ? Number(selected) : 1440;
+
+  if (enabled && (!Number.isInteger(frequency) || frequency < 60)) {
+    setPriceQueueMessage("Periodicidade invalida.");
+    return;
+  }
+
+  savePriceScheduleBtn.disabled = true;
+  setPriceQueueMessage("Salvando agendamento...");
+  try {
+    const { error } = await supabase.rpc("set_price_update_schedule", {
+      p_enabled: enabled,
+      p_frequency_minutes: frequency,
+    });
+    if (error) {
+      throw error;
+    }
+    setPriceQueueMessage(
+      enabled
+        ? `Agendamento salvo: a cada ${frequency} minutos.`
+        : "Agendamento desativado (modo manual)."
+    );
+    await loadPriceQueuePanel();
+  } catch (e) {
+    if (isMissingPriceQueueFeatureError(e)) {
+      hasPriceQueueFeature = false;
+      setPriceQueueControlsEnabled(false);
+      setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+      return;
+    }
+    setPriceQueueMessage(`Erro ao salvar agendamento: ${formatError(e)}`);
+  } finally {
+    if (savePriceScheduleBtn) {
+      savePriceScheduleBtn.disabled = false;
+    }
+  }
+}
+
+async function enqueueAllPricesNow() {
+  if (!hasPriceQueueFeature) {
+    return;
+  }
+
+  enqueueAllPricesBtn.disabled = true;
+  setPriceQueueMessage("Enfileirando todos os itens ativos...");
+  try {
+    const { data, error } = await supabase.rpc("enqueue_price_refresh_all");
+    if (error) {
+      throw error;
+    }
+    const enqueued = Number(data?.enqueued ?? 0);
+    setPriceQueueMessage(`Itens enfileirados: ${enqueued}.`);
+    await loadPriceQueuePanel();
+  } catch (e) {
+    if (isMissingPriceQueueFeatureError(e)) {
+      hasPriceQueueFeature = false;
+      setPriceQueueControlsEnabled(false);
+      setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+      return;
+    }
+    setPriceQueueMessage(`Erro ao enfileirar: ${formatError(e)}`);
+  } finally {
+    enqueueAllPricesBtn.disabled = false;
+  }
+}
+
+async function runDueScheduledNow() {
+  if (!hasPriceQueueFeature) {
+    return;
+  }
+
+  runDueScheduleBtn.disabled = true;
+  setPriceQueueMessage("Executando verificador de agendamento...");
+  try {
+    const { data, error } = await supabase.rpc("enqueue_due_scheduled_price_updates");
+    if (error) {
+      throw error;
+    }
+    const enqueued = Number(data?.enqueued ?? 0);
+    if (data?.ran === false) {
+      const reason = String(data?.reason || "nao_due");
+      if (reason === "disabled") {
+        setPriceQueueMessage("Agendamento esta desativado.");
+      } else if (reason === "not_due") {
+        setPriceQueueMessage("Ainda nao chegou o horario da proxima execucao.");
+      } else {
+        setPriceQueueMessage("Sem execucao pendente no momento.");
+      }
+    } else {
+      setPriceQueueMessage(`Agendamento executado. Novos itens na fila: ${enqueued}.`);
+    }
+    await loadPriceQueuePanel();
+  } catch (e) {
+    if (isMissingPriceQueueFeatureError(e)) {
+      hasPriceQueueFeature = false;
+      setPriceQueueControlsEnabled(false);
+      setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+      return;
+    }
+    setPriceQueueMessage(`Erro ao rodar agendamento: ${formatError(e)}`);
+  } finally {
+    runDueScheduleBtn.disabled = false;
+  }
+}
+
+async function processQueueNowInBrowser() {
+  if (!hasPriceQueueFeature) {
+    return;
+  }
+
+  processQueueNowBtn.disabled = true;
+  setPriceQueueMessage("Processando fila no navegador...");
+
+  try {
+    const { data: jobs, error: claimError } = await supabase.rpc("claim_price_update_jobs", {
+      p_limit: 20,
+    });
+    if (claimError) {
+      throw claimError;
+    }
+
+    const queueItems = Array.isArray(jobs) ? jobs : [];
+    if (!queueItems.length) {
+      setPriceQueueMessage("Fila vazia no momento.");
+      await loadPriceQueuePanel();
+      return;
+    }
+
+    let okCount = 0;
+    let failCount = 0;
+
+    for (const job of queueItems) {
+      const jobId = Number(job.job_id);
+      const buyUrl = String(job.buy_url || "").trim();
+
+      try {
+        const detected = await detectPriceFromUrl(buyUrl, 12000);
+        const { error: finishError } = await supabase.rpc("finish_price_update_job", {
+          p_job_id: jobId,
+          p_price_value: detected,
+          p_error_message: detected === null ? "PRECO_NAO_ENCONTRADO" : null,
+        });
+        if (finishError) {
+          throw finishError;
+        }
+        if (detected === null) {
+          failCount += 1;
+        } else {
+          okCount += 1;
+        }
+      } catch (e) {
+        failCount += 1;
+        await supabase.rpc("finish_price_update_job", {
+          p_job_id: jobId,
+          p_price_value: null,
+          p_error_message: String(e?.message || e || "ERRO_DESCONHECIDO").slice(0, 500),
+        });
+      }
+    }
+
+    const summaryMessage = `Processamento concluido. Sucesso: ${okCount} | Falhas: ${failCount} | Total: ${queueItems.length}.`;
+    await loadAdminData();
+    setPriceQueueMessage(summaryMessage);
+  } catch (e) {
+    if (isMissingPriceQueueFeatureError(e)) {
+      hasPriceQueueFeature = false;
+      setPriceQueueControlsEnabled(false);
+      setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+      return;
+    }
+    setPriceQueueMessage(`Erro ao processar fila: ${formatError(e)}`);
+  } finally {
+    processQueueNowBtn.disabled = false;
+  }
+}
+
+async function loadPriceQueuePanel() {
+  if (!hasPriceQueueFeature) {
+    setPriceQueueControlsEnabled(false);
+    setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+    return;
+  }
+
+  try {
+    const { data: settings, error: settingsError } = await supabase
+      .from("price_update_settings")
+      .select("is_enabled,frequency_minutes,next_run_at,last_run_at")
+      .eq("id", 1)
+      .maybeSingle();
+    if (settingsError) {
+      throw settingsError;
+    }
+
+    setScheduleSelectValue(normalizeScheduleSelectValue(settings));
+
+    const { data: queueRows, error: queueError } = await supabase
+      .from("price_update_queue")
+      .select("id,gift_id,status,attempts,detected_price,last_error,created_at,finished_at,gifts(title)")
+      .order("id", { ascending: false })
+      .limit(20);
+    if (queueError) {
+      throw queueError;
+    }
+
+    const rows = Array.isArray(queueRows) ? queueRows : [];
+    if (!rows.length) {
+      priceQueueTbody.innerHTML =
+        '<tr><td colspan="5" class="text-muted small">Sem registros de fila ainda.</td></tr>';
+    } else {
+      priceQueueTbody.innerHTML = rows
+        .map((r) => {
+          const title = esc(r.gifts?.title || `#${r.gift_id}`);
+          const status = esc(String(r.status || "-").toUpperCase());
+          const attempts = Number(r.attempts || 0);
+          const price = r.detected_price === null || r.detected_price === undefined
+            ? "-"
+            : formatBRL(r.detected_price, "-");
+          const updated = formatQueueTime(r.finished_at || r.created_at);
+          return `
+            <tr>
+              <td>${title}</td>
+              <td>${status}</td>
+              <td>${attempts}</td>
+              <td>${price}</td>
+              <td title="${esc(r.last_error || "")}">${updated}</td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    const scheduleText =
+      settings?.is_enabled === true
+        ? `Agendado a cada ${settings.frequency_minutes} min. Proxima execucao: ${formatQueueTime(
+            settings?.next_run_at
+          )}.`
+        : "Agendamento desativado (somente manual).";
+    setPriceQueueMessage(scheduleText);
+    setPriceQueueControlsEnabled(true);
+  } catch (e) {
+    if (isMissingPriceQueueFeatureError(e)) {
+      hasPriceQueueFeature = false;
+      setPriceQueueControlsEnabled(false);
+      setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+      priceQueueTbody.innerHTML =
+        '<tr><td colspan="5" class="text-muted small">Recurso indisponivel ate atualizar o banco.</td></tr>';
+      return;
+    }
+    setPriceQueueMessage(`Erro ao carregar fila: ${formatError(e)}`);
   }
 }
 
@@ -428,6 +758,7 @@ async function loadAdminData() {
   giftsCache = gifts;
   renderGiftFilterOptions();
   renderGiftsTable();
+  await loadPriceQueuePanel();
 
   const { data: res, error: er } = await supabase
     .from("gift_reservations")
@@ -582,6 +913,22 @@ refreshBtn.onclick = async () => {
     resMsg.textContent = `Erro ao atualizar: ${formatError(e)}`;
   }
 };
+
+if (savePriceScheduleBtn) {
+  savePriceScheduleBtn.onclick = savePriceSchedule;
+}
+
+if (enqueueAllPricesBtn) {
+  enqueueAllPricesBtn.onclick = enqueueAllPricesNow;
+}
+
+if (runDueScheduleBtn) {
+  runDueScheduleBtn.onclick = runDueScheduledNow;
+}
+
+if (processQueueNowBtn) {
+  processQueueNowBtn.onclick = processQueueNowInBrowser;
+}
 
 if (giftCategoryFilter) {
   giftCategoryFilter.onchange = () => {
