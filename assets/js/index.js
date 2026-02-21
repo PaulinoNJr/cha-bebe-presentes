@@ -270,10 +270,6 @@ function giftCard(g) {
     ? `<img src="${esc(g.image_url)}" class="card-img-top gift-img" alt="${esc(g.title)}">`
     : '<div class="bg-secondary-subtle d-flex align-items-center justify-content-center gift-img"><span class="text-muted small">Sem imagem</span></div>';
 
-  const buyBtn = g.buy_url
-    ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(g.buy_url)}" target="_blank" rel="noopener">Comprar</a>`
-    : '<span class="text-muted small">Sem link</span>';
-
   const reserveBtn = isFull
     ? '<button class="btn btn-sm btn-secondary" disabled>Esgotado</button>'
     : `<button class="btn btn-sm btn-primary" data-id="${g.id}">Reservar</button>`;
@@ -309,7 +305,6 @@ function giftCard(g) {
           <p class="card-text text-muted small mt-2">${esc(g.description || "")}</p>
 
           <div class="d-flex flex-wrap gap-2 mt-auto pt-2">
-            ${buyBtn}
             ${reserveBtn}
           </div>
 
@@ -454,9 +449,17 @@ confirmBtn.addEventListener("click", async () => {
 
   try {
     await reserveGift(currentGift.id, name, qty);
+    const redirectUrl = String(currentGift?.buy_url || "").trim();
     setModalAlert("success", `Reserva confirmada: ${upper(currentGift.title)} (x${qty}) - ${name}`);
     await loadAll();
-    setTimeout(() => reserveModal.hide(), 650);
+    if (redirectUrl) {
+      setModalAlert("success", "Reserva confirmada. Redirecionando para a compra...");
+      setTimeout(() => {
+        window.location.href = redirectUrl;
+      }, 650);
+    } else {
+      setTimeout(() => reserveModal.hide(), 650);
+    }
   } catch (e) {
     const msg = String(e.message || "");
     if (msg.includes("NOT_ENOUGH_QTY")) {
