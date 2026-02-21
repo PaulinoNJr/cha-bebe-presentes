@@ -8,6 +8,7 @@ create table if not exists public.gifts (
   image_url text,
   buy_url text,
   price_value numeric(12,2),
+  price_manual_override boolean not null default false,
   is_active boolean not null default true,
   display_order integer not null default 0 check (display_order >= 0),
   qty_total integer not null check (qty_total > 0),
@@ -23,6 +24,9 @@ alter table public.gifts
 
 alter table public.gifts
   add column if not exists price_value numeric(12,2);
+
+alter table public.gifts
+  add column if not exists price_manual_override boolean not null default false;
 
 alter table public.gifts
   add column if not exists is_active boolean not null default true;
@@ -131,6 +135,7 @@ select
   g.image_url,
   g.buy_url,
   g.price_value,
+  g.price_manual_override,
   g.is_active,
   g.display_order,
   g.classification_id,
@@ -328,6 +333,7 @@ begin
     now()
   from public.gifts g
   where coalesce(g.is_active, true) = true
+    and coalesce(g.price_manual_override, false) = false
     and coalesce(trim(g.buy_url), '') <> ''
     and not exists (
       select 1
@@ -426,6 +432,7 @@ begin
     now()
   from public.gifts g
   where coalesce(g.is_active, true) = true
+    and coalesce(g.price_manual_override, false) = false
     and coalesce(trim(g.buy_url), '') <> ''
     and not exists (
       select 1
@@ -524,7 +531,8 @@ begin
   if v_price > 0 then
     update public.gifts
     set price_value = v_price
-    where id = v_gift_id;
+    where id = v_gift_id
+      and coalesce(price_manual_override, false) = false;
 
     update public.price_update_queue
     set

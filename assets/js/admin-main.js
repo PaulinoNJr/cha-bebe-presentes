@@ -1,6 +1,6 @@
 ﻿import { getSupabaseConfig, isMissingSupabaseConfig } from "./shared/config.js";
 import { esc, upper, formatBRL } from "./shared/formatters.js";
-import { detectPriceFromUrl } from "./shared/price.js";
+import { detectPriceFromUrl, parsePriceInput } from "./shared/price.js";
 import { createSupabaseBrowserClient } from "./shared/supabase-client.js";
 
 const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseConfig();
@@ -76,6 +76,7 @@ function formatError(err) {
   if (
     msg.toLowerCase().includes("is_active") ||
     msg.toLowerCase().includes("display_order") ||
+    msg.toLowerCase().includes("price_manual_override") ||
     msg.toLowerCase().includes("price_update_")
   ) {
     return "Banco desatualizado. Execute o supabase-setup.sql mais recente.";
@@ -241,6 +242,75 @@ async function updateGiftPriceNow(giftIdToUpdate, buyUrl) {
   }
 
   return detectedPrice;
+}
+
+function formatPriceInputValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) {
+    return "";
+  }
+  return num.toFixed(2).replace(".", ",");
+}
+
+async function clearPendingPriceQueueByGift(giftId) {
+  const { error } = await supabase
+    .from("price_update_queue")
+    .delete()
+    .eq("gift_id", giftId)
+    .in("status", ["pending", "processing"]);
+  if (error) {
+    const msg = String(error?.message || "").toLowerCase();
+    if (msg.includes("price_update_queue") || msg.includes("does not exist")) {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function updateGiftPriceManual(giftIdToUpdate, priceInput) {
+  const parsedPrice = parsePriceInput(priceInput);
+  if (parsedPrice === null || parsedPrice <= 0) {
+    throw new Error("Preco invalido. Informe um valor maior que zero.");
+  }
+
+  const withManualFlag = await supabase
+    .from("gifts")
+    .update({
+      price_value: parsedPrice,
+      price_manual_override: true,
+    })
+    .eq("id", giftIdToUpdate);
+
+  if (withManualFlag.error) {
+    const msg = String(withManualFlag.error?.message || "").toLowerCase();
+    if (!msg.includes("price_manual_override")) {
+      throw withManualFlag.error;
+    }
+
+    const fallback = await supabase
+      .from("gifts")
+      .update({ price_value: parsedPrice })
+      .eq("id", giftIdToUpdate);
+    if (fallback.error) {
+      throw fallback.error;
+    }
+  }
+
+  await clearPendingPriceQueueByGift(giftIdToUpdate);
+  return parsedPrice;
+}
+
+async function setGiftPriceAutoMode(giftIdToUpdate, enabled) {
+  const { error } = await supabase
+    .from("gifts")
+    .update({ price_manual_override: !enabled })
+    .eq("id", giftIdToUpdate);
+  if (error) {
+    throw error;
+  }
 }
 
 async function deleteGiftAndClearReservations(giftIdToDelete) {
@@ -724,7 +794,26 @@ function renderGiftsTable() {
           <td>${g.id}</td>
           <td class="gift-title-cell">${esc(upper(g.title || ""))}</td>
           <td class="gift-class-cell">${esc(g.classification_name || "-")}</td>
-          <td data-gift-price-cell="${g.id}">${formatBRL(g.price_value, "-")}</td>
+          <td data-gift-price-cell="${g.id}">
+            <div class="gift-price-editor">
+              <input
+                class="form-control form-control-sm"
+                type="text"
+                inputmode="decimal"
+                data-manual-price-input="${g.id}"
+                value="${esc(formatPriceInputValue(g.price_value))}"
+                placeholder="0,00"
+              />
+              <button class="btn btn-sm btn-outline-primary" data-save-manual-price="${g.id}">Salvar</button>
+            </div>
+            <div class="small text-muted mt-1">
+              ${
+                g.price_manual_override === true
+                  ? '<span class="badge text-bg-warning">MANUAL</span> Auto desativado'
+                  : "Auto"
+              }
+            </div>
+          </td>
           <td>${
             g.is_active === false
               ? '<span class="badge text-bg-secondary">INATIVO</span>'
@@ -744,6 +833,11 @@ function renderGiftsTable() {
                   data-refresh-buy-url="${esc(g.buy_url || "")}"
                 >Atualizar preco</button>
                 <button
+                  class="btn btn-sm ${g.price_manual_override === true ? "btn-outline-success" : "btn-outline-secondary"} w-100"
+                  data-enable-auto-price="${g.id}"
+                  ${g.price_manual_override === true ? "" : "disabled"}
+                >Reativar auto preco</button>
+                <button
                   class="btn btn-sm ${g.is_active === false ? "btn-outline-success" : "btn-outline-warning"} w-100"
                   data-toggle-active="${g.id}"
                   data-next-active="${g.is_active === false ? "true" : "false"}"
@@ -756,6 +850,47 @@ function renderGiftsTable() {
       `
     )
     .join("");
+
+  giftsTbody.querySelectorAll("button[data-save-manual-price]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-save-manual-price"));
+      const input = giftsTbody.querySelector(`input[data-manual-price-input="${id}"]`);
+      const inputValue = String(input?.value || "").trim();
+
+      btn.disabled = true;
+      resMsg.textContent = "Salvando preco manual...";
+      try {
+        const savedPrice = await updateGiftPriceManual(id, inputValue);
+        resMsg.textContent = `Preco manual salvo: ${formatBRL(savedPrice, "-")}. Atualizacao automatica desativada para este item.`;
+        await loadAdminData();
+      } catch (e) {
+        resMsg.textContent = `Erro ao salvar preco manual: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
+  giftsTbody.querySelectorAll("button[data-enable-auto-price]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-enable-auto-price"));
+      if (!confirm("Reativar atualizacao automatica de preco para este item?")) {
+        return;
+      }
+
+      btn.disabled = true;
+      resMsg.textContent = "Reativando atualizacao automatica...";
+      try {
+        await setGiftPriceAutoMode(id, true);
+        resMsg.textContent = "Atualizacao automatica reativada para este item.";
+        await loadAdminData();
+      } catch (e) {
+        resMsg.textContent = `Erro ao reativar auto preco: ${formatError(e)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
 
   giftsTbody.querySelectorAll("button[data-toggle-active]").forEach((btn) => {
     btn.onclick = async () => {
@@ -800,7 +935,6 @@ function renderGiftsTable() {
       const id = Number(btn.getAttribute("data-refresh-price"));
       const buyUrl = String(btn.getAttribute("data-refresh-buy-url") || "").trim();
       const row = giftsTbody.querySelector(`tr[data-gift-row-id="${id}"]`);
-      const priceCell = giftsTbody.querySelector(`td[data-gift-price-cell="${id}"]`);
       const originalText = btn.textContent;
 
       btn.disabled = true;
@@ -809,9 +943,6 @@ function renderGiftsTable() {
       resMsg.textContent = "Atualizando preco do item...";
       try {
         const detectedPrice = await updateGiftPriceNow(id, buyUrl);
-        if (priceCell) {
-          priceCell.textContent = formatBRL(detectedPrice, "-");
-        }
         resMsg.textContent = `Preco atualizado: ${formatBRL(detectedPrice, "-")}.`;
         await loadAdminData();
         if (details) {
@@ -901,7 +1032,7 @@ async function loadAdminData() {
   const withClassOrder = await supabase
     .from("gifts_view")
     .select(
-      "id,title,buy_url,price_value,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
+      "id,title,buy_url,price_value,price_manual_override,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
     )
     .order("classification_display_order", { ascending: true })
     .order("classification_name", { ascending: true })
@@ -910,7 +1041,10 @@ async function loadAdminData() {
   if (withClassOrder.error) {
     const emsg = String(withClassOrder.error?.message || "").toLowerCase();
     const maybeMissing =
-      emsg.includes("classification_display_order") || emsg.includes("is_active") || emsg.includes("buy_url");
+      emsg.includes("classification_display_order") ||
+      emsg.includes("is_active") ||
+      emsg.includes("buy_url") ||
+      emsg.includes("price_manual_override");
 
     if (maybeMissing) {
       const fallback = await supabase
@@ -924,6 +1058,7 @@ async function loadAdminData() {
         is_active: true,
         classification_display_order: 0,
         buy_url: "",
+        price_manual_override: false,
       }));
       eg = fallback.error;
     } else {
@@ -933,6 +1068,7 @@ async function loadAdminData() {
     gifts = (withClassOrder.data ?? []).map((g) => ({
       ...g,
       classification_display_order: g.classification_display_order ?? 0,
+      price_manual_override: g.price_manual_override === true,
     }));
   }
 

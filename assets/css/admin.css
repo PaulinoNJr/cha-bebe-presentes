@@ -65,6 +65,17 @@ h1 {
   word-break: break-word;
 }
 
+.gift-price-editor {
+  min-width: 170px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.gift-price-editor input {
+  min-width: 90px;
+}
+
 .gift-actions-cell {
   width: 90px;
 }
