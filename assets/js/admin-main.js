@@ -44,6 +44,7 @@ const clearDoneFailedQueueBtn = document.getElementById("clearDoneFailedQueueBtn
 const priceQueueMsg = document.getElementById("priceQueueMsg");
 const priceQueueTbody = document.getElementById("priceQueueTbody");
 const resTbody = document.getElementById("resTbody");
+const auditTbody = document.getElementById("auditTbody");
 const refreshBtn = document.getElementById("refreshBtn");
 const resMsg = document.getElementById("resMsg");
 const instructionsEditor = document.getElementById("instructionsEditor");
@@ -222,6 +223,44 @@ async function setGiftActiveState(giftIdToUpdate, isActive) {
   }
 }
 
+async function updateGiftRowWithFallback(giftIdToUpdate, payload) {
+  const optionalCols = ["price_manual_override", "price_status", "price_last_error", "price_checked_at"];
+  let nextPayload = { ...payload };
+  let lastError = null;
+
+  for (let i = 0; i < 5; i += 1) {
+    const { error } = await supabase
+      .from("gifts")
+      .update(nextPayload)
+      .eq("id", giftIdToUpdate);
+
+    if (!error) {
+      return;
+    }
+    lastError = error;
+
+    const msg = String(error?.message || "").toLowerCase();
+    let removedAny = false;
+    optionalCols.forEach((col) => {
+      if (Object.prototype.hasOwnProperty.call(nextPayload, col) && msg.includes(col)) {
+        delete nextPayload[col];
+        removedAny = true;
+      }
+    });
+
+    if (!removedAny) {
+      throw error;
+    }
+    if (!Object.keys(nextPayload).length) {
+      throw error;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+}
+
 async function updateGiftPriceNow(giftIdToUpdate, buyUrl) {
   const normalizedUrl = String(buyUrl || "").trim();
   if (!normalizedUrl) {
@@ -233,13 +272,13 @@ async function updateGiftPriceNow(giftIdToUpdate, buyUrl) {
     throw new Error("Nao foi possivel detectar o preco nesse link.");
   }
 
-  const { error } = await supabase
-    .from("gifts")
-    .update({ price_value: detectedPrice })
-    .eq("id", giftIdToUpdate);
-  if (error) {
-    throw error;
-  }
+  await updateGiftRowWithFallback(giftIdToUpdate, {
+    price_value: detectedPrice,
+    price_manual_override: false,
+    price_status: "ok",
+    price_last_error: null,
+    price_checked_at: new Date().toISOString(),
+  });
 
   return detectedPrice;
 }
@@ -276,41 +315,25 @@ async function updateGiftPriceManual(giftIdToUpdate, priceInput) {
     throw new Error("Preco invalido. Informe um valor maior que zero.");
   }
 
-  const withManualFlag = await supabase
-    .from("gifts")
-    .update({
-      price_value: parsedPrice,
-      price_manual_override: true,
-    })
-    .eq("id", giftIdToUpdate);
-
-  if (withManualFlag.error) {
-    const msg = String(withManualFlag.error?.message || "").toLowerCase();
-    if (!msg.includes("price_manual_override")) {
-      throw withManualFlag.error;
-    }
-
-    const fallback = await supabase
-      .from("gifts")
-      .update({ price_value: parsedPrice })
-      .eq("id", giftIdToUpdate);
-    if (fallback.error) {
-      throw fallback.error;
-    }
-  }
+  await updateGiftRowWithFallback(giftIdToUpdate, {
+    price_value: parsedPrice,
+    price_manual_override: true,
+    price_status: "manual",
+    price_last_error: null,
+    price_checked_at: new Date().toISOString(),
+  });
 
   await clearPendingPriceQueueByGift(giftIdToUpdate);
   return parsedPrice;
 }
 
 async function setGiftPriceAutoMode(giftIdToUpdate, enabled) {
-  const { error } = await supabase
-    .from("gifts")
-    .update({ price_manual_override: !enabled })
-    .eq("id", giftIdToUpdate);
-  if (error) {
-    throw error;
-  }
+  await updateGiftRowWithFallback(giftIdToUpdate, {
+    price_manual_override: !enabled,
+    price_status: enabled ? "pending" : "manual",
+    price_last_error: null,
+    price_checked_at: enabled ? null : new Date().toISOString(),
+  });
 }
 
 async function deleteGiftAndClearReservations(giftIdToDelete) {
@@ -810,7 +833,16 @@ function renderGiftsTable() {
               ${
                 g.price_manual_override === true
                   ? '<span class="badge text-bg-warning">MANUAL</span> Auto desativado'
-                  : "Auto"
+                  : g.price_status === "ok"
+                  ? '<span class="badge text-bg-success">AUTO OK</span>'
+                  : g.price_status === "failed"
+                  ? `<span class="badge text-bg-danger" title="${esc(g.price_last_error || "Falha na captura")}">AUTO FALHOU</span>`
+                  : '<span class="badge text-bg-secondary">AUTO PENDENTE</span>'
+              }
+              ${
+                g.price_checked_at
+                  ? ` <span class="text-muted">(${new Date(g.price_checked_at).toLocaleString("pt-BR")})</span>`
+                  : ""
               }
             </div>
           </td>
@@ -984,6 +1016,59 @@ function renderGiftsTable() {
   });
 }
 
+function summarizeAuditPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "-";
+  }
+
+  const row = payload.new ?? payload.old ?? payload;
+  if (row && typeof row === "object") {
+    if (row.title) {
+      return String(row.title).slice(0, 80);
+    }
+    if (row.name) {
+      return String(row.name).slice(0, 80);
+    }
+    if (row.reserved_by) {
+      return `${String(row.reserved_by).slice(0, 60)} x${row.qty ?? "?"}`;
+    }
+  }
+
+  const keys = Object.keys(payload);
+  return keys.length ? keys.slice(0, 3).join(", ") : "-";
+}
+
+function renderAuditTable(rows) {
+  if (!auditTbody) {
+    return;
+  }
+
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) {
+    auditTbody.innerHTML = '<tr><td colspan="5" class="text-muted small">Sem eventos recentes.</td></tr>';
+    return;
+  }
+
+  auditTbody.innerHTML = list
+    .map((r) => {
+      const when = r.created_at ? new Date(r.created_at).toLocaleString("pt-BR") : "-";
+      const actor = r.actor_email || r.actor_role || "desconhecido";
+      const action = String(r.action || "-").toUpperCase();
+      const entity = `${r.entity_type || "-"} #${r.entity_id ?? "-"}`;
+      const details = summarizeAuditPayload(r.payload);
+      return `
+        <tr>
+          <td>${esc(when)}</td>
+          <td>${esc(actor)}</td>
+          <td>${esc(action)}</td>
+          <td>${esc(entity)}</td>
+          <td>${esc(details)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
 async function loadAdminData() {
   const { data: site, error: es } = await supabase
     .from("site_content")
@@ -1032,7 +1117,7 @@ async function loadAdminData() {
   const withClassOrder = await supabase
     .from("gifts_view")
     .select(
-      "id,title,buy_url,price_value,price_manual_override,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
+      "id,title,buy_url,price_value,price_manual_override,price_status,price_last_error,price_checked_at,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available"
     )
     .order("classification_display_order", { ascending: true })
     .order("classification_name", { ascending: true })
@@ -1044,7 +1129,10 @@ async function loadAdminData() {
       emsg.includes("classification_display_order") ||
       emsg.includes("is_active") ||
       emsg.includes("buy_url") ||
-      emsg.includes("price_manual_override");
+      emsg.includes("price_manual_override") ||
+      emsg.includes("price_status") ||
+      emsg.includes("price_last_error") ||
+      emsg.includes("price_checked_at");
 
     if (maybeMissing) {
       const fallback = await supabase
@@ -1059,6 +1147,9 @@ async function loadAdminData() {
         classification_display_order: 0,
         buy_url: "",
         price_manual_override: false,
+        price_status: "pending",
+        price_last_error: null,
+        price_checked_at: null,
       }));
       eg = fallback.error;
     } else {
@@ -1069,6 +1160,9 @@ async function loadAdminData() {
       ...g,
       classification_display_order: g.classification_display_order ?? 0,
       price_manual_override: g.price_manual_override === true,
+      price_status: String(g.price_status || "").toLowerCase(),
+      price_last_error: g.price_last_error || null,
+      price_checked_at: g.price_checked_at || null,
     }));
   }
 
@@ -1125,6 +1219,25 @@ async function loadAdminData() {
       }
     };
   });
+
+  if (auditTbody) {
+    const { data: auditRows, error: auditError } = await supabase
+      .from("admin_audit_log")
+      .select("created_at,actor_email,actor_role,action,entity_type,entity_id,payload")
+      .order("created_at", { ascending: false })
+      .limit(120);
+
+    if (auditError) {
+      const msg = String(auditError?.message || "").toLowerCase();
+      if (msg.includes("admin_audit_log") || msg.includes("does not exist")) {
+        renderAuditTable([]);
+      } else {
+        throw auditError;
+      }
+    } else {
+      renderAuditTable(auditRows ?? []);
+    }
+  }
 
   if (!resMsg.textContent) {
     resMsg.textContent = "Mostrando ate 200 reservas recentes.";

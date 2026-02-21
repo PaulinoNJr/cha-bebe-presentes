@@ -163,6 +163,33 @@
       background: #1fb85a;
       color: #fff;
     }
+    .skeleton-card {
+      pointer-events: none;
+    }
+    .skeleton-box,
+    .skeleton-line {
+      position: relative;
+      overflow: hidden;
+      background: #f6e9ef;
+      border-radius: 10px;
+    }
+    .skeleton-box::after,
+    .skeleton-line::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+      animation: melSkeleton 1.2s infinite;
+    }
+    .skeleton-line {
+      height: 12px;
+    }
+    @keyframes melSkeleton {
+      100% {
+        transform: translateX(100%);
+      }
+    }
     @media (max-width: 768px) {
       .sticky-actions .container {
         padding-top: 0.8rem;
@@ -170,5 +197,22 @@
       }
       .filter-ribbon {
         padding: 0.65rem 0.75rem;
+      }
+      .sticky-actions .btn {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.82rem;
+      }
+      #instructionsBox {
+        max-height: 150px;
+      }
+      .gift-img {
+        max-height: 250px;
+      }
+      .res-list {
+        max-height: 132px;
+      }
+      .whats-fab {
+        width: 54px;
+        height: 54px;
       }
     }

@@ -280,6 +280,28 @@ function renderInstructions(siteContent) {
   instructionsBox.classList.remove("d-none");
 }
 
+function renderLoadingSkeleton(count = 6) {
+  const qty = Math.max(1, count);
+  grid.innerHTML = Array.from({ length: qty })
+    .map(
+      () => `
+        <div class="col-12 col-md-6 col-lg-4">
+          <div class="card shadow-sm h-100 skeleton-card">
+            <div class="gift-img skeleton-box"></div>
+            <div class="card-body">
+              <div class="skeleton-line w-75 mb-2"></div>
+              <div class="skeleton-line w-50 mb-2"></div>
+              <div class="skeleton-line w-100 mb-2"></div>
+              <div class="skeleton-line w-100 mb-2"></div>
+              <div class="skeleton-line w-40"></div>
+            </div>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+}
+
 function getFilteredGifts() {
   const selected = classFilter.value;
   const base = !selected
@@ -429,6 +451,8 @@ function renderGrid() {
         const msg = String(e?.message || "");
         if (msg.includes("INVALID_CPF_RESERVATION") || msg.includes("INVALID_CPF")) {
           alert("cpf invalido para essa reserva");
+        } else if (msg.includes("TOO_MANY_ATTEMPTS")) {
+          alert("Muitas tentativas. Tente novamente em 5 minutos.");
         } else if (msg.includes("RESERVATION_NOT_FOUND")) {
           alert("Reserva nao encontrada.");
           await loadAll();
@@ -445,6 +469,7 @@ function renderGrid() {
 async function loadAll() {
   status.className = "alert alert-secondary py-2 small";
   status.textContent = "Carregando...";
+  renderLoadingSkeleton(6);
 
   const siteContent = await sbFetch("/rest/v1/site_content?select=instructions_html&id=eq.1&limit=1");
 
@@ -610,6 +635,30 @@ supabase.auth.onAuthStateChange(() => {
     checkIndexAdminAccess();
   }, 0);
 });
+
+let autoRefreshTimer = null;
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+  }
+  autoRefreshTimer = setInterval(() => {
+    if (document.hidden) {
+      return;
+    }
+    if (modalEl?.classList.contains("show")) {
+      return;
+    }
+    loadAll();
+  }, 60000);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    loadAll();
+  }
+});
+
 checkIndexAdminAccess();
-setInterval(loadAll, 15000);
+startAutoRefresh();
 loadAll();
