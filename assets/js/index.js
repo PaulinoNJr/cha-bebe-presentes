@@ -34,6 +34,7 @@ const reserveModal = new bootstrap.Modal(modalEl);
 const modalTitle = document.getElementById("modalTitle");
 const modalDesc = document.getElementById("modalDesc");
 const nameInput = document.getElementById("nameInput");
+const cpfInput = document.getElementById("cpfInput");
 const qtySelect = document.getElementById("qtySelect");
 const qtyHelp = document.getElementById("qtyHelp");
 const confirmBtn = document.getElementById("confirmBtn");
@@ -75,6 +76,56 @@ function formatAdminError(err) {
     return "Banco desatualizado para fila de precos.";
   }
   return msg;
+}
+
+function normalizeCpf(raw) {
+  return String(raw || "").replace(/\D/g, "");
+}
+
+function formatCpf(raw) {
+  const digits = normalizeCpf(raw).slice(0, 11);
+  if (digits.length <= 3) {
+    return digits;
+  }
+  if (digits.length <= 6) {
+    return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  }
+  if (digits.length <= 9) {
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  }
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function isValidCpf(rawCpf) {
+  const cpf = normalizeCpf(rawCpf);
+  if (!/^\d{11}$/.test(cpf)) {
+    return false;
+  }
+  if (/^(\d)\1{10}$/.test(cpf)) {
+    return false;
+  }
+
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) {
+    sum += Number(cpf[i]) * (10 - i);
+  }
+  let d1 = (sum * 10) % 11;
+  if (d1 === 10) {
+    d1 = 0;
+  }
+  if (d1 !== Number(cpf[9])) {
+    return false;
+  }
+
+  sum = 0;
+  for (let i = 0; i < 10; i += 1) {
+    sum += Number(cpf[i]) * (11 - i);
+  }
+  let d2 = (sum * 10) % 11;
+  if (d2 === 10) {
+    d2 = 0;
+  }
+  return d2 === Number(cpf[10]);
 }
 
 async function checkIndexAdminAccess() {
@@ -285,7 +336,16 @@ function giftCard(g) {
           (x) => `
             <li class="list-group-item d-flex justify-content-between align-items-center">
               <span>${esc(x.reserved_by)}</span>
-              <span class="badge text-bg-light">x${x.qty}</span>
+              <span class="d-flex align-items-center gap-2">
+                <span class="badge text-bg-light">x${x.qty}</span>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger py-0 px-2"
+                  data-cancel-reservation-id="${x.id}"
+                  title="Cancelar reserva"
+                  aria-label="Cancelar reserva"
+                ><span aria-hidden="true">&#128465;</span></button>
+              </span>
             </li>`
         )
         .join("")
@@ -342,6 +402,44 @@ function renderGrid() {
       openReserveModal(gift);
     });
   });
+
+  grid.querySelectorAll("button[data-cancel-reservation-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const reservationId = Number(btn.getAttribute("data-cancel-reservation-id"));
+      if (!Number.isFinite(reservationId)) {
+        return;
+      }
+
+      const providedCpf = prompt("Informe o CPF usado na reserva para cancelar:");
+      if (providedCpf === null) {
+        return;
+      }
+
+      if (!isValidCpf(providedCpf)) {
+        alert("cpf invalido para essa reserva");
+        return;
+      }
+
+      btn.disabled = true;
+      try {
+        await cancelReservationByCpf(reservationId, providedCpf);
+        await loadAll();
+        alert("Reserva cancelada com sucesso.");
+      } catch (e) {
+        const msg = String(e?.message || "");
+        if (msg.includes("INVALID_CPF_RESERVATION") || msg.includes("INVALID_CPF")) {
+          alert("cpf invalido para essa reserva");
+        } else if (msg.includes("RESERVATION_NOT_FOUND")) {
+          alert("Reserva nao encontrada.");
+          await loadAll();
+        } else {
+          alert(`Erro ao cancelar reserva: ${msg}`);
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 async function loadAll() {
@@ -389,7 +487,7 @@ async function loadAll() {
     }))
     .filter((g) => g.is_active !== false);
   reservations = await sbFetch(
-    "/rest/v1/gift_reservations?select=gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc"
+    "/rest/v1/gift_reservations?select=id,gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc"
   );
 
   renderInstructions(siteContent?.[0] || null);
@@ -403,6 +501,7 @@ function openReserveModal(gift) {
   modalTitle.textContent = `Reservar: ${upper(gift.title)}`;
   modalDesc.textContent = gift.description || "";
   nameInput.value = "";
+  cpfInput.value = "";
 
   qtySelect.innerHTML = "";
   const max = Math.max(0, gift.qty_available);
@@ -419,10 +518,20 @@ function openReserveModal(gift) {
   setTimeout(() => nameInput.focus(), 150);
 }
 
-async function reserveGift(giftId, name, qty) {
+async function reserveGift(giftId, name, qty, cpf) {
   return sbFetch("/rest/v1/rpc/reserve_gift", {
     method: "POST",
-    body: { p_gift_id: giftId, p_name: name, p_qty: qty },
+    body: { p_gift_id: giftId, p_name: name, p_qty: qty, p_cpf: normalizeCpf(cpf) },
+  });
+}
+
+async function cancelReservationByCpf(reservationId, cpf) {
+  return sbFetch("/rest/v1/rpc/cancel_reservation", {
+    method: "POST",
+    body: {
+      p_reservation_id: reservationId,
+      p_cpf: normalizeCpf(cpf),
+    },
   });
 }
 
@@ -433,6 +542,7 @@ confirmBtn.addEventListener("click", async () => {
   }
 
   const name = nameInput.value.trim();
+  const cpf = cpfInput.value.trim();
   const qty = Number(qtySelect.value);
 
   if (name.length < 3 || !name.includes(" ")) {
@@ -443,12 +553,16 @@ confirmBtn.addEventListener("click", async () => {
     setModalAlert("warning", "Escolha uma quantidade valida.");
     return;
   }
+  if (!isValidCpf(cpf)) {
+    setModalAlert("warning", "Informe um CPF valido.");
+    return;
+  }
 
   confirmBtn.disabled = true;
   confirmBtn.textContent = "Reservando...";
 
   try {
-    await reserveGift(currentGift.id, name, qty);
+    await reserveGift(currentGift.id, name, qty, cpf);
     const redirectUrl = String(currentGift?.buy_url || "").trim();
     setModalAlert("success", `Reserva confirmada: ${upper(currentGift.title)} (x${qty}) - ${name}`);
     await loadAll();
@@ -470,6 +584,8 @@ confirmBtn.addEventListener("click", async () => {
       setModalAlert("danger", "Nome invalido.");
     } else if (msg.includes("INVALID_QTY")) {
       setModalAlert("danger", "Quantidade invalida.");
+    } else if (msg.includes("INVALID_CPF")) {
+      setModalAlert("danger", "CPF invalido.");
     } else {
       setModalAlert("danger", `Erro: ${msg}`);
     }
@@ -481,6 +597,11 @@ confirmBtn.addEventListener("click", async () => {
 
 refreshBtn.addEventListener("click", loadAll);
 classFilter.addEventListener("change", renderGrid);
+if (cpfInput) {
+  cpfInput.addEventListener("input", () => {
+    cpfInput.value = formatCpf(cpfInput.value);
+  });
+}
 if (adminRefreshPricesBtn) {
   adminRefreshPricesBtn.addEventListener("click", refreshPricesAsAdmin);
 }
