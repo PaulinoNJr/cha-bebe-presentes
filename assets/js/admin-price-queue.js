@@ -30,11 +30,15 @@ const savePriceScheduleBtn = document.getElementById("savePriceScheduleBtn");
 const enqueueAllPricesBtn = document.getElementById("enqueueAllPricesBtn");
 const runDueScheduleBtn = document.getElementById("runDueScheduleBtn");
 const processQueueNowBtn = document.getElementById("processQueueNowBtn");
+const disableScheduleAndClearBtn = document.getElementById("disableScheduleAndClearBtn");
 const priceQueueStatusFilter = document.getElementById("priceQueueStatusFilter");
 const refreshPriceQueueBtn = document.getElementById("refreshPriceQueueBtn");
 const clearDoneFailedQueueBtn = document.getElementById("clearDoneFailedQueueBtn");
+const clearScheduledRunsBtn = document.getElementById("clearScheduledRunsBtn");
 const priceQueueMsg = document.getElementById("priceQueueMsg");
 const priceQueueTbody = document.getElementById("priceQueueTbody");
+const activeScheduleMsg = document.getElementById("activeScheduleMsg");
+const scheduledRunsTbody = document.getElementById("scheduledRunsTbody");
 const queueStatTotal = document.getElementById("queueStatTotal");
 const queueStatPending = document.getElementById("queueStatPending");
 const queueStatProcessing = document.getElementById("queueStatProcessing");
@@ -44,6 +48,7 @@ const queueStatUpdatedAt = document.getElementById("queueStatUpdatedAt");
 
 let hasPriceQueueFeature = true;
 let priceQueueRowsCache = [];
+let currentScheduleSettings = null;
 
 function formatError(err) {
   const msg = String(err?.message || err || "Erro inesperado");
@@ -97,9 +102,11 @@ function setPriceQueueControlsEnabled(enabled) {
     enqueueAllPricesBtn,
     runDueScheduleBtn,
     processQueueNowBtn,
+    disableScheduleAndClearBtn,
     priceQueueStatusFilter,
     refreshPriceQueueBtn,
     clearDoneFailedQueueBtn,
+    clearScheduledRunsBtn,
   ]
     .filter(Boolean)
     .forEach((el) => {
@@ -185,6 +192,22 @@ function getFilteredPriceQueueRows() {
   return priceQueueRowsCache.filter((row) => String(row.status || "") === status);
 }
 
+function getScheduledRows() {
+  const rows = Array.isArray(priceQueueRowsCache) ? priceQueueRowsCache : [];
+  return rows
+    .filter((row) => {
+      return Boolean(row?.scheduled_for || row?.created_at);
+    })
+    .sort((a, b) => {
+      const aTime = Date.parse(a?.scheduled_for || a?.created_at || 0) || 0;
+      const bTime = Date.parse(b?.scheduled_for || b?.created_at || 0) || 0;
+      if (aTime !== bTime) {
+        return bTime - aTime;
+      }
+      return Number(b?.id || 0) - Number(a?.id || 0);
+    });
+}
+
 async function deleteQueueEventById(queueId) {
   const { error } = await supabase.from("price_update_queue").delete().eq("id", queueId);
   if (error) {
@@ -200,6 +223,80 @@ async function clearDoneFailedQueueEvents() {
   if (error) {
     throw error;
   }
+}
+
+async function clearScheduledQueueEvents() {
+  const { error } = await supabase
+    .from("price_update_queue")
+    .delete()
+    .in("status", ["pending", "processing"]);
+  if (error) {
+    throw error;
+  }
+}
+
+function renderScheduledRuns() {
+  if (!scheduledRunsTbody) {
+    return;
+  }
+
+  const scheduledRows = getScheduledRows();
+  const pendingCount = scheduledRows.filter((row) => String(row?.status || "").toLowerCase() === "pending").length;
+  const processingCount = scheduledRows.filter((row) => String(row?.status || "").toLowerCase() === "processing").length;
+  const enabled = currentScheduleSettings?.is_enabled === true;
+  const frequency = Number(currentScheduleSettings?.frequency_minutes || 0);
+  const nextRun = formatQueueTime(currentScheduleSettings?.next_run_at || null);
+
+  if (activeScheduleMsg) {
+    activeScheduleMsg.textContent = enabled
+      ? `Agendamento ativo (${frequency} min). Proxima execucao: ${nextRun}. Pendentes: ${pendingCount} | Processando: ${processingCount}.`
+      : `Agendamento automatico desativado. Pendentes: ${pendingCount} | Processando: ${processingCount}.`;
+  }
+
+  if (!scheduledRows.length) {
+    scheduledRunsTbody.innerHTML =
+      '<tr><td colspan="5" class="text-muted small">Nenhum agendamento registrado.</td></tr>';
+    return;
+  }
+
+  scheduledRunsTbody.innerHTML = scheduledRows
+    .map((r) => {
+      const id = Number(r.id);
+      const title = esc(r.gifts?.title || `#${r.gift_id}`);
+      const status = esc(String(r.status || "-").toUpperCase());
+      const scheduledFor = formatQueueTime(r.scheduled_for || r.created_at);
+      return `
+        <tr>
+          <td>${id}</td>
+          <td>${title}</td>
+          <td>${status}</td>
+          <td>${scheduledFor}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-danger" data-del-scheduled-id="${id}">Excluir</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  scheduledRunsTbody.querySelectorAll("button[data-del-scheduled-id]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-del-scheduled-id"));
+      if (!confirm(`Excluir o agendamento #${id}?`)) {
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await deleteQueueEventById(id);
+        setPriceQueueMessage(`Agendamento #${id} excluido.`);
+        await loadPriceQueuePanel();
+      } catch (e) {
+        setPriceQueueMessage(`Erro ao excluir agendamento: ${formatError(e)}`);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
 }
 
 function renderPriceQueueRows() {
@@ -300,6 +397,38 @@ async function savePriceSchedule() {
     setPriceQueueMessage(`Erro ao salvar agendamento: ${formatError(e)}`);
   } finally {
     savePriceScheduleBtn.disabled = false;
+  }
+}
+
+async function disableScheduleAndClearPending() {
+  if (!hasPriceQueueFeature) {
+    return;
+  }
+
+  disableScheduleAndClearBtn.disabled = true;
+  setPriceQueueMessage("Desativando agendamento e limpando pendentes...");
+  try {
+    const { error: scheduleError } = await supabase.rpc("set_price_update_schedule", {
+      p_enabled: false,
+      p_frequency_minutes: 1440,
+    });
+    if (scheduleError) {
+      throw scheduleError;
+    }
+
+    await clearScheduledQueueEvents();
+    setPriceQueueMessage("Agendamento desativado e pendentes removidos.");
+    await loadPriceQueuePanel();
+  } catch (e) {
+    if (isMissingPriceQueueFeatureError(e)) {
+      hasPriceQueueFeature = false;
+      setPriceQueueControlsEnabled(false);
+      setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+      return;
+    }
+    setPriceQueueMessage(`Erro ao desativar agendamento: ${formatError(e)}`);
+  } finally {
+    disableScheduleAndClearBtn.disabled = false;
   }
 }
 
@@ -446,6 +575,10 @@ async function loadPriceQueuePanel() {
   if (!hasPriceQueueFeature) {
     setPriceQueueControlsEnabled(false);
     setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
+    priceQueueRowsCache = [];
+    currentScheduleSettings = null;
+    renderScheduledRuns();
+    renderQueueStats();
     return;
   }
 
@@ -458,6 +591,7 @@ async function loadPriceQueuePanel() {
     if (settingsError) {
       throw settingsError;
     }
+    currentScheduleSettings = settings || null;
 
     setScheduleSelectValue(normalizeScheduleSelectValue(settings));
 
@@ -467,13 +601,14 @@ async function loadPriceQueuePanel() {
         "id,gift_id,status,attempts,scheduled_for,detected_price,last_error,created_at,started_at,finished_at,gifts(title)"
       )
       .order("id", { ascending: false })
-      .limit(100);
+      .limit(300);
     if (queueError) {
       throw queueError;
     }
 
     priceQueueRowsCache = Array.isArray(queueRows) ? queueRows : [];
     renderPriceQueueRows();
+    renderScheduledRuns();
     renderQueueStats();
 
     const scheduleText =
@@ -492,11 +627,15 @@ async function loadPriceQueuePanel() {
       priceQueueTbody.innerHTML =
         '<tr><td colspan="8" class="text-muted small">Recurso indisponivel ate atualizar o banco.</td></tr>';
       priceQueueRowsCache = [];
+      currentScheduleSettings = null;
+      renderScheduledRuns();
       renderQueueStats();
       return;
     }
     setPriceQueueMessage(`Erro ao carregar fila: ${formatError(e)}`);
     priceQueueRowsCache = [];
+    currentScheduleSettings = null;
+    renderScheduledRuns();
     renderQueueStats();
   }
 }
@@ -532,6 +671,28 @@ runDueScheduleBtn.onclick = runDueScheduledNow;
 processQueueNowBtn.onclick = processQueueNowInBrowser;
 refreshPriceQueueBtn.onclick = loadPriceQueuePanel;
 priceQueueStatusFilter.onchange = renderPriceQueueRows;
+disableScheduleAndClearBtn.onclick = async () => {
+  if (!confirm("Desativar o agendamento automatico e excluir todos os pendentes?")) {
+    return;
+  }
+  await disableScheduleAndClearPending();
+};
+
+clearScheduledRunsBtn.onclick = async () => {
+  if (!confirm("Excluir todos os agendamentos pendentes/processando?")) {
+    return;
+  }
+  clearScheduledRunsBtn.disabled = true;
+  try {
+    await clearScheduledQueueEvents();
+    setPriceQueueMessage("Agendamentos pendentes removidos.");
+    await loadPriceQueuePanel();
+  } catch (e) {
+    setPriceQueueMessage(`Erro ao limpar agendamentos: ${formatError(e)}`);
+  } finally {
+    clearScheduledRunsBtn.disabled = false;
+  }
+};
 
 clearDoneFailedQueueBtn.onclick = async () => {
   if (!confirm("Excluir todos os eventos concluidos e falhos da fila?")) {

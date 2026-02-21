@@ -92,6 +92,29 @@
               <button id="enqueueAllPricesBtn" class="btn btn-outline-secondary btn-sm" type="button">Enfileirar todos agora</button>
               <button id="runDueScheduleBtn" class="btn btn-outline-secondary btn-sm" type="button">Rodar agendado agora</button>
               <button id="processQueueNowBtn" class="btn btn-primary btn-sm" type="button">Processar fila no navegador</button>
+              <button id="disableScheduleAndClearBtn" class="btn btn-outline-danger btn-sm" type="button">Desativar agendamento + limpar pendentes</button>
+            </div>
+          </div>
+
+          <div class="border rounded-3 p-2 bg-light-subtle mt-3">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <div class="fw-semibold small">Agendamentos criados</div>
+              <button id="clearScheduledRunsBtn" class="btn btn-outline-danger btn-sm" type="button">Excluir todos os agendamentos pendentes</button>
+            </div>
+            <div id="activeScheduleMsg" class="small text-muted mt-1"></div>
+            <div class="table-responsive mt-2">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Item</th>
+                    <th>Status</th>
+                    <th>Agendado para</th>
+                    <th>Acoes</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduledRunsTbody"></tbody>
+              </table>
             </div>
           </div>
 
