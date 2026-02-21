@@ -38,6 +38,9 @@ const savePriceScheduleBtn = document.getElementById("savePriceScheduleBtn");
 const enqueueAllPricesBtn = document.getElementById("enqueueAllPricesBtn");
 const runDueScheduleBtn = document.getElementById("runDueScheduleBtn");
 const processQueueNowBtn = document.getElementById("processQueueNowBtn");
+const priceQueueStatusFilter = document.getElementById("priceQueueStatusFilter");
+const refreshPriceQueueBtn = document.getElementById("refreshPriceQueueBtn");
+const clearDoneFailedQueueBtn = document.getElementById("clearDoneFailedQueueBtn");
 const priceQueueMsg = document.getElementById("priceQueueMsg");
 const priceQueueTbody = document.getElementById("priceQueueTbody");
 const resTbody = document.getElementById("resTbody");
@@ -52,6 +55,7 @@ const hiliteColorPicker = document.getElementById("hiliteColorPicker");
 
 let classifications = [];
 let giftsCache = [];
+let priceQueueRowsCache = [];
 let hasPriceQueueFeature = true;
 
 function formatError(err) {
@@ -236,7 +240,16 @@ function isMissingPriceQueueFeatureError(err) {
 }
 
 function setPriceQueueControlsEnabled(enabled) {
-  [priceScheduleSelect, savePriceScheduleBtn, enqueueAllPricesBtn, runDueScheduleBtn, processQueueNowBtn]
+  [
+    priceScheduleSelect,
+    savePriceScheduleBtn,
+    enqueueAllPricesBtn,
+    runDueScheduleBtn,
+    processQueueNowBtn,
+    priceQueueStatusFilter,
+    refreshPriceQueueBtn,
+    clearDoneFailedQueueBtn,
+  ]
     .filter(Boolean)
     .forEach((el) => {
       el.disabled = !enabled;
@@ -277,6 +290,88 @@ function setScheduleSelectValue(value) {
   }
 
   priceScheduleSelect.value = stringValue;
+}
+
+function getFilteredPriceQueueRows() {
+  const status = String(priceQueueStatusFilter?.value || "");
+  if (!status) {
+    return priceQueueRowsCache;
+  }
+  return priceQueueRowsCache.filter((row) => String(row.status || "") === status);
+}
+
+async function deleteQueueEventById(queueId) {
+  const { error } = await supabase.from("price_update_queue").delete().eq("id", queueId);
+  if (error) {
+    throw error;
+  }
+}
+
+async function clearDoneFailedQueueEvents() {
+  const { error } = await supabase
+    .from("price_update_queue")
+    .delete()
+    .in("status", ["done", "failed"]);
+  if (error) {
+    throw error;
+  }
+}
+
+function renderPriceQueueRows() {
+  const rows = getFilteredPriceQueueRows();
+  if (!rows.length) {
+    priceQueueTbody.innerHTML =
+      '<tr><td colspan="8" class="text-muted small">Nenhum evento para o filtro selecionado.</td></tr>';
+    return;
+  }
+
+  priceQueueTbody.innerHTML = rows
+    .map((r) => {
+      const id = Number(r.id);
+      const title = esc(r.gifts?.title || `#${r.gift_id}`);
+      const status = esc(String(r.status || "-").toUpperCase());
+      const attempts = Number(r.attempts || 0);
+      const price = r.detected_price === null || r.detected_price === undefined
+        ? "-"
+        : formatBRL(r.detected_price, "-");
+      const scheduledFor = formatQueueTime(r.scheduled_for || r.created_at);
+      const updated = formatQueueTime(r.finished_at || r.started_at || r.created_at);
+
+      return `
+        <tr>
+          <td>${id}</td>
+          <td>${title}</td>
+          <td>${status}</td>
+          <td>${scheduledFor}</td>
+          <td>${attempts}</td>
+          <td>${price}</td>
+          <td title="${esc(r.last_error || "")}">${updated}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-danger" data-del-queue-id="${id}">Excluir</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  priceQueueTbody.querySelectorAll("button[data-del-queue-id]").forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.getAttribute("data-del-queue-id"));
+      if (!confirm(`Excluir o evento #${id} da fila?`)) {
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await deleteQueueEventById(id);
+        setPriceQueueMessage(`Evento #${id} excluido.`);
+        await loadPriceQueuePanel();
+      } catch (e) {
+        setPriceQueueMessage(`Erro ao excluir evento: ${formatError(e)}`);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
 }
 
 async function savePriceSchedule() {
@@ -483,39 +578,17 @@ async function loadPriceQueuePanel() {
 
     const { data: queueRows, error: queueError } = await supabase
       .from("price_update_queue")
-      .select("id,gift_id,status,attempts,detected_price,last_error,created_at,finished_at,gifts(title)")
+      .select(
+        "id,gift_id,status,attempts,scheduled_for,detected_price,last_error,created_at,started_at,finished_at,gifts(title)"
+      )
       .order("id", { ascending: false })
-      .limit(20);
+      .limit(100);
     if (queueError) {
       throw queueError;
     }
 
-    const rows = Array.isArray(queueRows) ? queueRows : [];
-    if (!rows.length) {
-      priceQueueTbody.innerHTML =
-        '<tr><td colspan="5" class="text-muted small">Sem registros de fila ainda.</td></tr>';
-    } else {
-      priceQueueTbody.innerHTML = rows
-        .map((r) => {
-          const title = esc(r.gifts?.title || `#${r.gift_id}`);
-          const status = esc(String(r.status || "-").toUpperCase());
-          const attempts = Number(r.attempts || 0);
-          const price = r.detected_price === null || r.detected_price === undefined
-            ? "-"
-            : formatBRL(r.detected_price, "-");
-          const updated = formatQueueTime(r.finished_at || r.created_at);
-          return `
-            <tr>
-              <td>${title}</td>
-              <td>${status}</td>
-              <td>${attempts}</td>
-              <td>${price}</td>
-              <td title="${esc(r.last_error || "")}">${updated}</td>
-            </tr>
-          `;
-        })
-        .join("");
-    }
+    priceQueueRowsCache = Array.isArray(queueRows) ? queueRows : [];
+    renderPriceQueueRows();
 
     const scheduleText =
       settings?.is_enabled === true
@@ -531,7 +604,7 @@ async function loadPriceQueuePanel() {
       setPriceQueueControlsEnabled(false);
       setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
       priceQueueTbody.innerHTML =
-        '<tr><td colspan="5" class="text-muted small">Recurso indisponivel ate atualizar o banco.</td></tr>';
+        '<tr><td colspan="8" class="text-muted small">Recurso indisponivel ate atualizar o banco.</td></tr>';
       return;
     }
     setPriceQueueMessage(`Erro ao carregar fila: ${formatError(e)}`);
@@ -928,6 +1001,32 @@ if (runDueScheduleBtn) {
 
 if (processQueueNowBtn) {
   processQueueNowBtn.onclick = processQueueNowInBrowser;
+}
+
+if (refreshPriceQueueBtn) {
+  refreshPriceQueueBtn.onclick = loadPriceQueuePanel;
+}
+
+if (priceQueueStatusFilter) {
+  priceQueueStatusFilter.onchange = renderPriceQueueRows;
+}
+
+if (clearDoneFailedQueueBtn) {
+  clearDoneFailedQueueBtn.onclick = async () => {
+    if (!confirm("Excluir todos os eventos concluidos e falhos da fila?")) {
+      return;
+    }
+    clearDoneFailedQueueBtn.disabled = true;
+    try {
+      await clearDoneFailedQueueEvents();
+      setPriceQueueMessage("Eventos concluidos/falhos removidos.");
+      await loadPriceQueuePanel();
+    } catch (e) {
+      setPriceQueueMessage(`Erro ao limpar eventos: ${formatError(e)}`);
+    } finally {
+      clearDoneFailedQueueBtn.disabled = false;
+    }
+  };
 }
 
 if (giftCategoryFilter) {

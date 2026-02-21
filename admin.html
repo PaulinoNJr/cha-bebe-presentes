@@ -155,16 +155,31 @@
                     <button id="processQueueNowBtn" class="btn btn-primary btn-sm" type="button">Processar fila no navegador</button>
                   </div>
                 </div>
+                <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+                  <label class="small text-muted mb-0" for="priceQueueStatusFilter">Eventos</label>
+                  <select id="priceQueueStatusFilter" class="form-select form-select-sm w-auto">
+                    <option value="">Todos</option>
+                    <option value="pending">Pendentes</option>
+                    <option value="processing">Processando</option>
+                    <option value="done">Concluídos</option>
+                    <option value="failed">Falhos</option>
+                  </select>
+                  <button id="refreshPriceQueueBtn" class="btn btn-outline-secondary btn-sm" type="button">Atualizar eventos</button>
+                  <button id="clearDoneFailedQueueBtn" class="btn btn-outline-danger btn-sm" type="button">Excluir concluídos/falhos</button>
+                </div>
                 <div id="priceQueueMsg" class="small text-muted mt-2"></div>
                 <div class="table-responsive mt-2">
                   <table class="table table-sm align-middle mb-0">
                     <thead>
                       <tr>
+                        <th>#</th>
                         <th>Item</th>
                         <th>Status</th>
+                        <th>Agendado</th>
                         <th>Tent.</th>
                         <th>Preço</th>
                         <th>Atualizado</th>
+                        <th>Ações</th>
                       </tr>
                     </thead>
                     <tbody id="priceQueueTbody"></tbody>
