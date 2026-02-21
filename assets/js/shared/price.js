@@ -130,6 +130,116 @@ function extractMercadoLivreItemId(text) {
   return match ? match[0].toUpperCase() : null;
 }
 
+function extractMercadoLivreListingIdsFromUrl(urlObj) {
+  const ids = new Set();
+  const source = `${urlObj?.href || ""} ${urlObj?.pathname || ""} ${urlObj?.search || ""}`;
+  const widRegex = /[?&]wid=(MLB\d{7,})\b/gi;
+  let match;
+  while ((match = widRegex.exec(source)) !== null) {
+    ids.add(match[1].toUpperCase());
+  }
+
+  const listingPathRegex = /\/MLB-(\d{7,})\b/gi;
+  while ((match = listingPathRegex.exec(source)) !== null) {
+    ids.add(`MLB${match[1]}`);
+  }
+
+  return [...ids];
+}
+
+function extractMercadoLivreListingIdsFromText(text) {
+  const source = String(text ?? "");
+  const ids = new Set();
+
+  const widRegex = /[?&]wid=(MLB\d{7,})\b/gi;
+  let match;
+  while ((match = widRegex.exec(source)) !== null) {
+    ids.add(match[1].toUpperCase());
+  }
+
+  const listingPathRegex = /produto\.mercadolivre\.com\.br\/MLB-(\d{7,})\b/gi;
+  while ((match = listingPathRegex.exec(source)) !== null) {
+    ids.add(`MLB${match[1]}`);
+  }
+
+  return [...ids];
+}
+
+function extractMercadoLivreDePorPrice(text) {
+  const source = String(text ?? "");
+  if (!source) {
+    return null;
+  }
+
+  const amountPattern =
+    "([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})|[0-9]+(?:[.,][0-9]{2}))";
+
+  const dePor = new RegExp(
+    `de\\s*(?:r\\$\\s*)?${amountPattern}[\\s\\S]{0,80}(?:por|a\\s*partir\\s*de)\\s*(?:r\\$\\s*)?${amountPattern}`,
+    "i"
+  );
+  const matchDePor = source.match(dePor);
+  if (!matchDePor?.[1]) {
+    return null;
+  }
+
+  return parsePriceInput(matchDePor[1]);
+}
+
+function extractMercadoLivreListingMainPrice(text) {
+  const source = String(text ?? "");
+  if (!source) {
+    return null;
+  }
+
+  const startMarkers = ["Vender um igual", "Mercado Livre Brasil"];
+  let start = 0;
+  for (const marker of startMarkers) {
+    const idx = source.indexOf(marker);
+    if (idx >= 0) {
+      start = Math.max(0, idx - 1200);
+      break;
+    }
+  }
+
+  let segment = source.slice(start, start + 12000);
+  const endMarkers = [
+    "Quem viu este produto tambem comprou",
+    "Quem viu este produto também comprou",
+    "Mais anuncios do vendedor",
+    "Mais anúncios do vendedor",
+    "Perguntas e respostas",
+    "Produtos relacionados",
+    "Compare com itens similares",
+  ];
+
+  let end = segment.length;
+  for (const marker of endMarkers) {
+    const idx = segment.indexOf(marker);
+    if (idx > 0 && idx < end) {
+      end = idx;
+    }
+  }
+  segment = segment.slice(0, end);
+
+  const dePorPrice = extractMercadoLivreDePorPrice(segment);
+  if (dePorPrice !== null) {
+    return dePorPrice;
+  }
+
+  const firstPrice = segment.match(
+    /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+(?:[.,][0-9]{2}))/i
+  );
+  if (firstPrice?.[1]) {
+    const parsed = parsePriceInput(firstPrice[1]);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 function extractMercadoLivreItemIdFromUrl(urlObj) {
   const source = `${urlObj?.pathname || ""} ${urlObj?.href || ""}`;
   const match = source.match(/\b(ML[A-Z]-?\d{7,})\b/i);
@@ -172,6 +282,34 @@ async function fetchMercadoLivreApiPrice(itemId, timeoutMs = 10000) {
   return null;
 }
 
+async function fetchMercadoLivreListingPrice(listingId, timeoutMs = 10000) {
+  const normalized = String(listingId || "").toUpperCase().replace("-", "");
+  const match = normalized.match(/^MLB(\d{7,})$/);
+  if (!match) {
+    return null;
+  }
+
+  const listingUrl = `https://produto.mercadolivre.com.br/MLB-${match[1]}?ts=${Date.now()}`;
+  const noScheme = listingUrl.replace(/^https?:\/\//i, "");
+  const candidates = [
+    `https://r.jina.ai/http://${noScheme}`,
+    `https://r.jina.ai/https://${noScheme}`,
+  ];
+
+  for (const candidate of candidates) {
+    const text = await fetchTextWithTimeout(candidate, timeoutMs);
+    if (!text) {
+      continue;
+    }
+    const mainPrice = extractMercadoLivreListingMainPrice(text);
+    if (mainPrice !== null) {
+      return mainPrice;
+    }
+  }
+
+  return null;
+}
+
 function extractMercadoLivreMainBlock(text) {
   const source = String(text ?? "");
   if (!source) {
@@ -200,20 +338,10 @@ function extractMercadoLivreMainPrice(text) {
     return null;
   }
 
-  const amountPattern =
-    "([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{2})|[0-9]+(?:[.,][0-9]{2}))";
-
   // Em alguns casos "de X por Y" usa Y para pix/cupom. Mantemos X.
-  const dePor = new RegExp(
-    `de\\s*(?:r\\$\\s*)?${amountPattern}[\\s\\S]{0,40}(?:por|a\\s*partir\\s*de)\\s*(?:r\\$\\s*)?${amountPattern}`,
-    "i"
-  );
-  const matchDePor = block.match(dePor);
-  if (matchDePor?.[1]) {
-    const parsed = parsePriceInput(matchDePor[1]);
-    if (parsed !== null) {
-      return parsed;
-    }
+  const dePorPrice = extractMercadoLivreDePorPrice(block);
+  if (dePorPrice !== null) {
+    return dePorPrice;
   }
 
   const firstR$ = block.match(
@@ -260,6 +388,14 @@ export async function detectPriceFromUrl(url, timeoutMs = 10000) {
     if (apiPriceFromUrl !== null) {
       return apiPriceFromUrl;
     }
+
+    const listingIdsFromUrl = extractMercadoLivreListingIdsFromUrl(parsedUrl);
+    for (const listingId of listingIdsFromUrl) {
+      const listingPrice = await fetchMercadoLivreListingPrice(listingId, timeoutMs);
+      if (listingPrice !== null) {
+        return listingPrice;
+      }
+    }
   }
 
   for (const candidate of candidates) {
@@ -273,6 +409,14 @@ export async function detectPriceFromUrl(url, timeoutMs = 10000) {
       const apiPrice = await fetchMercadoLivreApiPrice(itemId, timeoutMs);
       if (apiPrice !== null) {
         return apiPrice;
+      }
+
+      const listingIds = extractMercadoLivreListingIdsFromText(text);
+      for (const listingId of listingIds) {
+        const listingPrice = await fetchMercadoLivreListingPrice(listingId, timeoutMs);
+        if (listingPrice !== null) {
+          return listingPrice;
+        }
       }
 
       const mlMainPrice = extractMercadoLivreMainPrice(text);
