@@ -1,0 +1,22 @@
+{
+  "name": "cha-bebe-presentes",
+  "version": "1.0.0",
+  "description": "",
+  "main": "supabase-config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PaulinoNJr/cha-bebe-presentes.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/PaulinoNJr/cha-bebe-presentes/issues"
+  },
+  "homepage": "https://github.com/PaulinoNJr/cha-bebe-presentes#readme",
+  "devDependencies": {}
+}

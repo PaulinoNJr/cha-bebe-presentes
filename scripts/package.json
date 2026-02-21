@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "price-worker": "node price-worker.mjs"
+  }
+}
