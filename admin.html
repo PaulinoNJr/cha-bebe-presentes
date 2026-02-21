@@ -14,6 +14,7 @@
       <h1 class="h4 mb-0">Admin - Chá da Melissa (Mel)</h1>
       <div class="d-flex gap-2">
         <a href="./admin-item.html" class="btn btn-primary btn-sm">Novo item</a>
+        <a href="./admin-price-queue.html" class="btn btn-outline-primary btn-sm">Fila de preços</a>
         <a href="./index.html" class="btn btn-outline-primary btn-sm">Ver lista</a>
         <button id="logoutBtn" class="btn btn-outline-secondary btn-sm d-none">Sair</button>
       </div>
@@ -112,6 +113,7 @@
               </p>
               <div class="d-flex gap-2">
                 <a href="./admin-item.html" class="btn btn-primary btn-sm">Cadastrar novo item</a>
+                <a href="./admin-price-queue.html" class="btn btn-outline-primary btn-sm">Gerenciar fila de preços</a>
               </div>
             </div>
           </div>
@@ -131,61 +133,6 @@
                 </div>
               </div>
               <div id="giftsFilterInfo" class="small text-muted mt-2"></div>
-
-              <div class="border rounded-3 p-2 bg-light-subtle mt-3">
-                <div class="fw-semibold small">Atualização de preços em lote (fila)</div>
-                <div class="row g-2 mt-1 align-items-end">
-                  <div class="col-md-3">
-                    <label class="form-label small mb-1">Agendamento</label>
-                    <select id="priceScheduleSelect" class="form-select form-select-sm">
-                      <option value="off">Manual (sem agendamento)</option>
-                      <option value="60">A cada 1 hora</option>
-                      <option value="120">A cada 2 horas</option>
-                      <option value="180">A cada 3 horas</option>
-                      <option value="360">A cada 6 horas</option>
-                      <option value="720">A cada 12 horas</option>
-                      <option value="1440">1 vez ao dia</option>
-                      <option value="2880">A cada 2 dias</option>
-                    </select>
-                  </div>
-                  <div class="col-md-9 d-flex flex-wrap gap-2">
-                    <button id="savePriceScheduleBtn" class="btn btn-outline-primary btn-sm" type="button">Salvar agendamento</button>
-                    <button id="enqueueAllPricesBtn" class="btn btn-outline-secondary btn-sm" type="button">Enfileirar todos agora</button>
-                    <button id="runDueScheduleBtn" class="btn btn-outline-secondary btn-sm" type="button">Rodar agendado agora</button>
-                    <button id="processQueueNowBtn" class="btn btn-primary btn-sm" type="button">Processar fila no navegador</button>
-                  </div>
-                </div>
-                <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
-                  <label class="small text-muted mb-0" for="priceQueueStatusFilter">Eventos</label>
-                  <select id="priceQueueStatusFilter" class="form-select form-select-sm w-auto">
-                    <option value="">Todos</option>
-                    <option value="pending">Pendentes</option>
-                    <option value="processing">Processando</option>
-                    <option value="done">Concluídos</option>
-                    <option value="failed">Falhos</option>
-                  </select>
-                  <button id="refreshPriceQueueBtn" class="btn btn-outline-secondary btn-sm" type="button">Atualizar eventos</button>
-                  <button id="clearDoneFailedQueueBtn" class="btn btn-outline-danger btn-sm" type="button">Excluir concluídos/falhos</button>
-                </div>
-                <div id="priceQueueMsg" class="small text-muted mt-2"></div>
-                <div class="table-responsive mt-2">
-                  <table class="table table-sm align-middle mb-0">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Item</th>
-                        <th>Status</th>
-                        <th>Agendado</th>
-                        <th>Tent.</th>
-                        <th>Preço</th>
-                        <th>Atualizado</th>
-                        <th>Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody id="priceQueueTbody"></tbody>
-                  </table>
-                </div>
-              </div>
 
               <div class="table-responsive mt-3 gifts-table-responsive">
                 <table class="table table-sm align-middle gifts-table">

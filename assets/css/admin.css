@@ -105,3 +105,33 @@ h1 {
 .gift-row-updating td {
   background: #fff6dc !important;
 }
+
+.queue-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.queue-stat-card {
+  background: #fffef8;
+  border: 1px solid #ecd4a4;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.queue-stat-label {
+  font-size: 12px;
+  color: #8f5b00;
+}
+
+.queue-stat-value {
+  font-size: 20px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: #6f4700;
+}
+
+.queue-stat-value-small {
+  font-size: 14px;
+  font-weight: 600;
+}

@@ -57,6 +57,7 @@ let classifications = [];
 let giftsCache = [];
 let priceQueueRowsCache = [];
 let hasPriceQueueFeature = true;
+const hasPriceQueuePanel = Boolean(priceQueueTbody && priceQueueMsg && priceScheduleSelect);
 
 function formatError(err) {
   const msg = String(err?.message || err || "Erro inesperado");
@@ -371,6 +372,10 @@ async function clearDoneFailedQueueEvents() {
 }
 
 function renderPriceQueueRows() {
+  if (!priceQueueTbody) {
+    return;
+  }
+
   const rows = getFilteredPriceQueueRows();
   if (!rows.length) {
     priceQueueTbody.innerHTML =
@@ -611,6 +616,10 @@ async function processQueueNowInBrowser() {
 }
 
 async function loadPriceQueuePanel() {
+  if (!hasPriceQueuePanel) {
+    return;
+  }
+
   if (!hasPriceQueueFeature) {
     setPriceQueueControlsEnabled(false);
     setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
@@ -656,8 +665,10 @@ async function loadPriceQueuePanel() {
       hasPriceQueueFeature = false;
       setPriceQueueControlsEnabled(false);
       setPriceQueueMessage("Fila de precos indisponivel. Execute o supabase-setup.sql atualizado.");
-      priceQueueTbody.innerHTML =
-        '<tr><td colspan="8" class="text-muted small">Recurso indisponivel ate atualizar o banco.</td></tr>';
+      if (priceQueueTbody) {
+        priceQueueTbody.innerHTML =
+          '<tr><td colspan="8" class="text-muted small">Recurso indisponivel ate atualizar o banco.</td></tr>';
+      }
       return;
     }
     setPriceQueueMessage(`Erro ao carregar fila: ${formatError(e)}`);
@@ -932,7 +943,9 @@ async function loadAdminData() {
   giftsCache = await hydrateGiftBuyUrls(gifts);
   renderGiftFilterOptions();
   renderGiftsTable();
-  await loadPriceQueuePanel();
+  if (hasPriceQueuePanel) {
+    await loadPriceQueuePanel();
+  }
 
   const { data: res, error: er } = await supabase
     .from("gift_reservations")
