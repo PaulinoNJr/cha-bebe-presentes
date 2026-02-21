@@ -1,7 +1,9 @@
-﻿import { getSupabaseConfig, isMissingSupabaseConfig } from "./shared/config.js";
+import { getSupabaseConfig, isMissingSupabaseConfig } from "./shared/config.js";
 import { esc, upper, formatBRL } from "./shared/formatters.js";
 import { sanitizeHtml } from "./shared/sanitize.js";
+import { detectPriceFromUrl } from "./shared/price.js";
 import { createSupabaseRestClient } from "./shared/rest.js";
+import { createSupabaseBrowserClient } from "./shared/supabase-client.js";
 
 const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseConfig();
 const missingConfig = isMissingSupabaseConfig(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -9,6 +11,8 @@ const missingConfig = isMissingSupabaseConfig(SUPABASE_URL, SUPABASE_ANON_KEY);
 const grid = document.getElementById("grid");
 const status = document.getElementById("status");
 const refreshBtn = document.getElementById("refreshBtn");
+const adminRefreshPricesBtn = document.getElementById("adminRefreshPricesBtn");
+const adminRefreshMsg = document.getElementById("adminRefreshMsg");
 const classFilter = document.getElementById("classFilter");
 const instructionsBox = document.getElementById("instructionsBox");
 
@@ -23,6 +27,7 @@ const sbFetch = createSupabaseRestClient({
   url: SUPABASE_URL,
   anonKey: SUPABASE_ANON_KEY,
 });
+const supabase = createSupabaseBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const modalEl = document.getElementById("reserveModal");
 const reserveModal = new bootstrap.Modal(modalEl);
@@ -38,6 +43,144 @@ let classifications = [];
 let gifts = [];
 let reservations = [];
 let currentGift = null;
+let canRefreshPrices = false;
+
+function setAdminRefreshVisibility(show) {
+  if (adminRefreshPricesBtn) {
+    adminRefreshPricesBtn.classList.toggle("d-none", !show);
+  }
+  if (adminRefreshMsg) {
+    adminRefreshMsg.classList.toggle("d-none", !show);
+    if (!show) {
+      adminRefreshMsg.textContent = "";
+    }
+  }
+}
+
+function setAdminRefreshMessage(msg) {
+  if (adminRefreshMsg) {
+    adminRefreshMsg.textContent = msg;
+  }
+}
+
+function formatAdminError(err) {
+  const msg = String(err?.message || err || "Erro inesperado");
+  if (msg.includes("NOT_ADMIN")) {
+    return "Somente admin pode atualizar precos.";
+  }
+  if (msg.toLowerCase().includes("row-level security")) {
+    return "Permissao negada para atualizar precos.";
+  }
+  if (msg.toLowerCase().includes("price_update_")) {
+    return "Banco desatualizado para fila de precos.";
+  }
+  return msg;
+}
+
+async function checkIndexAdminAccess() {
+  try {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      canRefreshPrices = false;
+      setAdminRefreshVisibility(false);
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("is_admin");
+    if (error || data !== true) {
+      canRefreshPrices = false;
+      setAdminRefreshVisibility(false);
+      return;
+    }
+
+    canRefreshPrices = true;
+    setAdminRefreshVisibility(true);
+  } catch {
+    canRefreshPrices = false;
+    setAdminRefreshVisibility(false);
+  }
+}
+
+async function refreshPricesAsAdmin() {
+  if (!canRefreshPrices || !adminRefreshPricesBtn) {
+    return;
+  }
+
+  adminRefreshPricesBtn.disabled = true;
+  const originalText = adminRefreshPricesBtn.textContent;
+  adminRefreshPricesBtn.textContent = "Atualizando...";
+  setAdminRefreshMessage("Enfileirando e processando precos...");
+
+  let okCount = 0;
+  let failCount = 0;
+  let totalJobs = 0;
+
+  try {
+    const { error: enqueueError } = await supabase.rpc("enqueue_price_refresh_all");
+    if (enqueueError) {
+      throw enqueueError;
+    }
+
+    const maxBatches = 8;
+    const batchLimit = 20;
+
+    for (let i = 0; i < maxBatches; i += 1) {
+      const { data: jobs, error: claimError } = await supabase.rpc("claim_price_update_jobs", {
+        p_limit: batchLimit,
+      });
+      if (claimError) {
+        throw claimError;
+      }
+
+      const queueItems = Array.isArray(jobs) ? jobs : [];
+      if (!queueItems.length) {
+        break;
+      }
+      totalJobs += queueItems.length;
+
+      for (const job of queueItems) {
+        const jobId = Number(job.job_id);
+        const buyUrl = String(job.buy_url || "").trim();
+        try {
+          const detected = await detectPriceFromUrl(buyUrl, 12000);
+          const { error: finishError } = await supabase.rpc("finish_price_update_job", {
+            p_job_id: jobId,
+            p_price_value: detected,
+            p_error_message: detected === null ? "PRECO_NAO_ENCONTRADO" : null,
+          });
+          if (finishError) {
+            throw finishError;
+          }
+          if (detected === null) {
+            failCount += 1;
+          } else {
+            okCount += 1;
+          }
+        } catch (jobError) {
+          failCount += 1;
+          await supabase.rpc("finish_price_update_job", {
+            p_job_id: jobId,
+            p_price_value: null,
+            p_error_message: String(jobError?.message || jobError || "ERRO_DESCONHECIDO").slice(0, 500),
+          });
+        }
+      }
+    }
+
+    await loadAll();
+    setAdminRefreshMessage(
+      `Atualizacao concluida. Sucesso: ${okCount} | Falhas: ${failCount} | Itens: ${totalJobs}.`
+    );
+  } catch (e) {
+    setAdminRefreshMessage(`Erro ao atualizar precos: ${formatAdminError(e)}`);
+  } finally {
+    adminRefreshPricesBtn.disabled = false;
+    adminRefreshPricesBtn.textContent = originalText || "Atualizar precos";
+  }
+}
 
 function setModalAlert(kind, msg) {
   modalAlert.classList.remove(
@@ -335,5 +478,14 @@ confirmBtn.addEventListener("click", async () => {
 
 refreshBtn.addEventListener("click", loadAll);
 classFilter.addEventListener("change", renderGrid);
+if (adminRefreshPricesBtn) {
+  adminRefreshPricesBtn.addEventListener("click", refreshPricesAsAdmin);
+}
+supabase.auth.onAuthStateChange(() => {
+  setTimeout(() => {
+    checkIndexAdminAccess();
+  }, 0);
+});
+checkIndexAdminAccess();
 setInterval(loadAll, 15000);
 loadAll();
