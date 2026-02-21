@@ -27,6 +27,11 @@ Variaveis de ambiente:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - opcional: `PRICE_WORKER_BATCH_SIZE` (padrao `20`)
 - opcional: `PRICE_WORKER_MAX_BATCHES` (padrao `5`)
+- opcional: `PRICE_WORKER_FORCE_ENQUEUE_ALL=true` (enfileira todos os itens em cada execucao)
+
+Importante:
+- `SUPABASE_SERVICE_ROLE_KEY` precisa ser a chave de **Service Role** do projeto Supabase.
+- Se usar `anonKey`, o worker falha com `NOT_ADMIN`.
 
 Execucao:
 

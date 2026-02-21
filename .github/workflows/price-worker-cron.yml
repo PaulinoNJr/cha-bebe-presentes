@@ -1,13 +1,24 @@
-name: Price Worker (cron)
+﻿name: Price Worker (cron)
 
 on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      force_enqueue_all:
+        description: "Forcar enfileirar todos os itens nesta execucao"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   run-worker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -18,11 +29,19 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - name: Validate secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" || (echo "Missing SUPABASE_URL secret" && exit 1)
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || (echo "Missing SUPABASE_SERVICE_ROLE_KEY secret" && exit 1)
 
       - name: Run worker
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PRICE_WORKER_BATCH_SIZE: "30"
+          PRICE_WORKER_MAX_BATCHES: "10"
+          PRICE_WORKER_FORCE_ENQUEUE_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_enqueue_all || 'false' }}
         run: node scripts/price-worker.mjs

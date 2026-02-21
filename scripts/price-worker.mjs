@@ -4,10 +4,25 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BATCH_SIZE = Number(process.env.PRICE_WORKER_BATCH_SIZE || 20);
 const MAX_BATCHES = Number(process.env.PRICE_WORKER_MAX_BATCHES || 5);
+const FORCE_ENQUEUE_ALL = String(process.env.PRICE_WORKER_FORCE_ENQUEUE_ALL || "false") === "true";
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.");
   process.exit(1);
+}
+
+function parseJwtRole(jwt) {
+  try {
+    const parts = String(jwt || "").split(".");
+    if (parts.length < 2) {
+      return null;
+    }
+    const payloadJson = Buffer.from(parts[1], "base64url").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+    return payload?.role || null;
+  } catch {
+    return null;
+  }
 }
 
 function parsePriceInput(value) {
@@ -193,6 +208,19 @@ async function processBatch() {
 
 async function main() {
   console.log("Iniciando worker de fila de precos...");
+
+  const role = parseJwtRole(SUPABASE_SERVICE_ROLE_KEY);
+  if (role !== "service_role") {
+    console.error(
+      `A chave informada nao parece service_role (role atual: ${role || "desconhecida"}).`
+    );
+    process.exit(1);
+  }
+
+  if (FORCE_ENQUEUE_ALL) {
+    const forced = await supabaseRpc("enqueue_price_refresh_all");
+    console.log("Enfileiramento forcado:", forced);
+  }
 
   const due = await supabaseRpc("enqueue_due_scheduled_price_updates");
   console.log("Agendamento:", due);
