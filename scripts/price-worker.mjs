@@ -25,6 +25,17 @@ function parseJwtRole(jwt) {
   }
 }
 
+function detectKeyFormat(key) {
+  const value = String(key || "").trim();
+  if (value.startsWith("eyJ")) {
+    return "jwt";
+  }
+  if (value.startsWith("sb_")) {
+    return "sb_secret";
+  }
+  return "unknown";
+}
+
 function parsePriceInput(value) {
   const raw = String(value ?? "").trim();
   if (!raw) {
@@ -209,12 +220,27 @@ async function processBatch() {
 async function main() {
   console.log("Iniciando worker de fila de precos...");
 
+  const keyFormat = detectKeyFormat(SUPABASE_SERVICE_ROLE_KEY);
   const role = parseJwtRole(SUPABASE_SERVICE_ROLE_KEY);
-  if (role !== "service_role") {
+
+  // Bloqueia somente quando fica claro que a chave eh anon.
+  // Para chaves "sb_secret_*" o role nao eh legivel localmente.
+  if (role === "anon") {
     console.error(
-      `A chave informada nao parece service_role (role atual: ${role || "desconhecida"}).`
+      "A chave informada parece anon. Use a SERVICE ROLE key no secret SUPABASE_SERVICE_ROLE_KEY."
     );
     process.exit(1);
+  }
+  if (keyFormat === "jwt" && role && role !== "service_role") {
+    console.error(
+      `JWT informado com role inesperada: ${role}. Use a SERVICE ROLE key.`
+    );
+    process.exit(1);
+  }
+  if (keyFormat !== "jwt") {
+    console.log(
+      "Chave em formato nao-JWT detectada; validacao de role local sera feita via RPC no Supabase."
+    );
   }
 
   if (FORCE_ENQUEUE_ALL) {

@@ -32,6 +32,7 @@ Variaveis de ambiente:
 Importante:
 - `SUPABASE_SERVICE_ROLE_KEY` precisa ser a chave de **Service Role** do projeto Supabase.
 - Se usar `anonKey`, o worker falha com `NOT_ADMIN`.
+- Chaves novas no formato `sb_secret_...` sao validas (nao sao JWT).
 
 Execucao:
 
