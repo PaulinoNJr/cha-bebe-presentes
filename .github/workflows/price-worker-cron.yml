@@ -1,8 +1,6 @@
 ﻿name: Price Worker (cron)
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       force_enqueue_all:
