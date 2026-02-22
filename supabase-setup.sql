@@ -177,7 +177,7 @@ begin
 end $$;
 
 update public.gift_reservations
-set reserved_by_cpf_hash = encode(digest(regexp_replace(reserved_by_cpf, '\D', '', 'g'), 'sha256'), 'hex')
+set reserved_by_cpf_hash = pg_catalog.encode(extensions.digest(regexp_replace(reserved_by_cpf, '\D', '', 'g'), 'sha256'), 'hex')
 where reserved_by_cpf_hash is null
   and reserved_by_cpf is not null
   and reserved_by_cpf ~ '^[0-9]{11}$';
@@ -417,7 +417,7 @@ returns text
 language sql
 immutable
 as $$
-  select encode(digest(regexp_replace(coalesce(p_cpf, ''), '\D', '', 'g'), 'sha256'), 'hex');
+  select pg_catalog.encode(extensions.digest(regexp_replace(coalesce(p_cpf, ''), '\D', '', 'g'), 'sha256'), 'hex');
 $$;
 
 create or replace function public.sanitize_audit_row(p_row jsonb)
