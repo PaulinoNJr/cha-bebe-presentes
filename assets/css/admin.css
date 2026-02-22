@@ -147,6 +147,35 @@ h1 {
   font-weight: 600;
 }
 
+.admin-search-input {
+  min-width: 240px;
+}
+
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.admin-kpi-card {
+  background: #fffef8;
+  border: 1px solid #ecd4a4;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.admin-kpi-label {
+  font-size: 11px;
+  color: #8f5b00;
+}
+
+.admin-kpi-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #6f4700;
+  line-height: 1.1;
+}
+
 .product-preview-card {
   background: #fffef8;
   border: 1px solid #ecd4a4;
@@ -186,4 +215,10 @@ h1 {
 
 .product-preview-body {
   padding: 12px;
+}
+
+@media (max-width: 768px) {
+  .admin-search-input {
+    min-width: 100%;
+  }
 }

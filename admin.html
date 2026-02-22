@@ -129,10 +129,40 @@
                   <select id="giftCategoryFilter" class="form-select form-select-sm w-auto">
                     <option value="">Todas</option>
                   </select>
+                  <input
+                    id="giftSearchInput"
+                    class="form-control form-control-sm admin-search-input"
+                    type="search"
+                    placeholder="Buscar por titulo, categoria, id..."
+                  />
+                  <button id="clearGiftFiltersBtn" class="btn btn-outline-secondary btn-sm">Limpar filtros</button>
                   <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Atualizar</button>
                 </div>
               </div>
               <div id="giftsFilterInfo" class="small text-muted mt-2"></div>
+
+              <div class="admin-kpi-grid mt-2">
+                <div class="admin-kpi-card">
+                  <div class="admin-kpi-label">Total</div>
+                  <div id="giftStatTotal" class="admin-kpi-value">0</div>
+                </div>
+                <div class="admin-kpi-card">
+                  <div class="admin-kpi-label">Ativos</div>
+                  <div id="giftStatActive" class="admin-kpi-value">0</div>
+                </div>
+                <div class="admin-kpi-card">
+                  <div class="admin-kpi-label">Inativos</div>
+                  <div id="giftStatInactive" class="admin-kpi-value">0</div>
+                </div>
+                <div class="admin-kpi-card">
+                  <div class="admin-kpi-label">Baixo estoque</div>
+                  <div id="giftStatLowStock" class="admin-kpi-value">0</div>
+                </div>
+                <div class="admin-kpi-card">
+                  <div class="admin-kpi-label">Esgotados</div>
+                  <div id="giftStatOut" class="admin-kpi-value">0</div>
+                </div>
+              </div>
 
               <div class="table-responsive mt-3 gifts-table-responsive">
                 <table class="table table-sm align-middle gifts-table">

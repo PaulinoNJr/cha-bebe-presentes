@@ -32,7 +32,14 @@ const classTbody = document.getElementById("classTbody");
 
 const giftsTbody = document.getElementById("giftsTbody");
 const giftCategoryFilter = document.getElementById("giftCategoryFilter");
+const giftSearchInput = document.getElementById("giftSearchInput");
+const clearGiftFiltersBtn = document.getElementById("clearGiftFiltersBtn");
 const giftsFilterInfo = document.getElementById("giftsFilterInfo");
+const giftStatTotal = document.getElementById("giftStatTotal");
+const giftStatActive = document.getElementById("giftStatActive");
+const giftStatInactive = document.getElementById("giftStatInactive");
+const giftStatLowStock = document.getElementById("giftStatLowStock");
+const giftStatOut = document.getElementById("giftStatOut");
 const priceScheduleSelect = document.getElementById("priceScheduleSelect");
 const savePriceScheduleBtn = document.getElementById("savePriceScheduleBtn");
 const enqueueAllPricesBtn = document.getElementById("enqueueAllPricesBtn");
@@ -83,6 +90,32 @@ function formatError(err) {
     return "Banco desatualizado. Execute o supabase-setup.sql mais recente.";
   }
   return msg;
+}
+
+function normalizeForSearch(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function setGiftStats(total, active, inactive, lowStock, outOfStock) {
+  if (giftStatTotal) {
+    giftStatTotal.textContent = String(total);
+  }
+  if (giftStatActive) {
+    giftStatActive.textContent = String(active);
+  }
+  if (giftStatInactive) {
+    giftStatInactive.textContent = String(inactive);
+  }
+  if (giftStatLowStock) {
+    giftStatLowStock.textContent = String(lowStock);
+  }
+  if (giftStatOut) {
+    giftStatOut.textContent = String(outOfStock);
+  }
 }
 
 function applyEditorFormat(cmd, value = null) {
@@ -774,9 +807,20 @@ function renderGiftFilterOptions() {
     return;
   }
 
+  const countByClass = giftsCache.reduce((acc, gift) => {
+    const key = String(gift.classification_id ?? "");
+    acc.set(key, (acc.get(key) || 0) + 1);
+    return acc;
+  }, new Map());
+
   giftCategoryFilter.innerHTML =
     '<option value="">Todas</option>' +
-    classifications.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    classifications
+      .map((c) => {
+        const qty = countByClass.get(String(c.id)) || 0;
+        return `<option value="${c.id}">${esc(c.name)} (${qty})</option>`;
+      })
+      .join("");
 
   if (previousValue && classifications.some((c) => String(c.id) === previousValue)) {
     giftCategoryFilter.value = previousValue;
@@ -787,26 +831,54 @@ function renderGiftFilterOptions() {
 
 function getFilteredGifts() {
   const selectedClass = giftCategoryFilter?.value ?? "";
-  if (!selectedClass) {
-    return giftsCache;
+  const normalizedQuery = normalizeForSearch(giftSearchInput?.value ?? "");
+
+  let filtered = giftsCache;
+  if (selectedClass) {
+    filtered = filtered.filter((g) => String(g.classification_id ?? "") === selectedClass);
   }
-  return giftsCache.filter((g) => String(g.classification_id ?? "") === selectedClass);
+
+  if (!normalizedQuery) {
+    return filtered;
+  }
+
+  return filtered.filter((g) => {
+    const haystack = normalizeForSearch(
+      `${g.id ?? ""} ${g.title ?? ""} ${g.classification_name ?? ""} ${g.buy_url ?? ""}`
+    );
+    return haystack.includes(normalizedQuery);
+  });
+}
+
+function renderGiftStats(filteredGifts) {
+  const base = Array.isArray(giftsCache) ? giftsCache : [];
+  const shown = Array.isArray(filteredGifts) ? filteredGifts : [];
+
+  const active = shown.filter((g) => g.is_active !== false).length;
+  const inactive = shown.filter((g) => g.is_active === false).length;
+  const lowStock = shown.filter((g) => Number(g.qty_available) > 0 && Number(g.qty_available) <= 2).length;
+  const out = shown.filter((g) => Number(g.qty_available) <= 0).length;
+
+  setGiftStats(base.length, active, inactive, lowStock, out);
 }
 
 function renderGiftsTable() {
   const gifts = getFilteredGifts();
   const selectedClass = giftCategoryFilter?.value ?? "";
+  const query = String(giftSearchInput?.value || "").trim();
   const selectedClassName = selectedClass
     ? classifications.find((c) => String(c.id) === selectedClass)?.name || "Categoria"
     : "Todas";
 
   if (giftsFilterInfo) {
-    giftsFilterInfo.textContent = `Filtro: ${selectedClassName} | Exibindo ${gifts.length} de ${giftsCache.length} itens.`;
+    const queryInfo = query ? ` | Busca: "${query}"` : "";
+    giftsFilterInfo.textContent = `Filtro: ${selectedClassName}${queryInfo} | Exibindo ${gifts.length} de ${giftsCache.length} itens.`;
   }
+  renderGiftStats(gifts);
 
   if (!gifts.length) {
     giftsTbody.innerHTML =
-      '<tr><td colspan="9" class="text-muted small">Nenhum item para esta categoria.</td></tr>';
+      '<tr><td colspan="9" class="text-muted small">Nenhum item encontrado com os filtros atuais.</td></tr>';
     return;
   }
 
@@ -1397,6 +1469,36 @@ if (giftCategoryFilter) {
     renderGiftsTable();
   };
 }
+
+if (giftSearchInput) {
+  giftSearchInput.oninput = () => {
+    renderGiftsTable();
+  };
+}
+
+if (clearGiftFiltersBtn) {
+  clearGiftFiltersBtn.onclick = () => {
+    if (giftCategoryFilter) {
+      giftCategoryFilter.value = "";
+    }
+    if (giftSearchInput) {
+      giftSearchInput.value = "";
+      giftSearchInput.focus();
+    }
+    renderGiftsTable();
+  };
+}
+
+document.addEventListener("keydown", (event) => {
+  if (!giftSearchInput || adminArea.classList.contains("d-none")) {
+    return;
+  }
+  if (event.ctrlKey && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    giftSearchInput.focus();
+    giftSearchInput.select();
+  }
+});
 
 const {
   data: { session },
