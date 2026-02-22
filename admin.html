@@ -78,148 +78,129 @@
         </div>
       </div>
 
-      <div class="row g-3 mt-1">
-        <div class="col-lg-5">
-          <div class="card shadow-sm mb-3">
-            <div class="card-body">
-              <h2 class="h6">Cadastro de Classificação</h2>
+      <div class="card shadow-sm mt-1 mb-3">
+        <div class="card-body">
+          <h2 class="h6">Cadastro de Classificação</h2>
 
-              <div class="input-group input-group-sm mb-2">
-                <input id="className" class="form-control" placeholder="Ex: Higiene, Quarto, Roupas" />
-                <button id="saveClassBtn" class="btn btn-outline-primary">Salvar</button>
-              </div>
-              <div id="classMsg" class="small text-muted mb-2"></div>
-
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th>Classificação (editável)</th>
-                      <th>Ordem</th>
-                      <th class="text-end">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody id="classTbody"></tbody>
-                </table>
-              </div>
-            </div>
+          <div class="input-group input-group-sm mb-2">
+            <input id="className" class="form-control" placeholder="Ex: Higiene, Quarto, Roupas" />
+            <button id="saveClassBtn" class="btn btn-outline-primary">Salvar</button>
           </div>
+          <div id="classMsg" class="small text-muted mb-2"></div>
 
-          <div class="card shadow-sm">
-            <div class="card-body">
-              <h2 class="h6">Cadastro de Itens</h2>
-              <p class="small text-muted mb-3">
-                O cadastro e edição de itens agora ficam em uma subpágina dedicada.
-              </p>
-              <div class="d-flex gap-2">
-                <a href="./admin-item.html" class="btn btn-primary btn-sm">Cadastrar novo item</a>
-                <a href="./admin-price-queue.html" class="btn btn-outline-primary btn-sm">Gerenciar fila de preços</a>
-              </div>
-            </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Classificação (editável)</th>
+                  <th>Ordem</th>
+                  <th class="text-end">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="classTbody"></tbody>
+            </table>
           </div>
         </div>
+      </div>
 
-        <div class="col-lg-7">
-          <div class="card shadow-sm">
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h2 class="h6 mb-0">Presentes</h2>
-                <div class="d-flex align-items-center gap-2">
-                  <label for="giftCategoryFilter" class="small text-muted mb-0">Categoria</label>
-                  <select id="giftCategoryFilter" class="form-select form-select-sm w-auto">
-                    <option value="">Todas</option>
-                  </select>
-                  <input
-                    id="giftSearchInput"
-                    class="form-control form-control-sm admin-search-input"
-                    type="search"
-                    placeholder="Buscar por titulo, categoria, id..."
-                  />
-                  <button id="clearGiftFiltersBtn" class="btn btn-outline-secondary btn-sm">Limpar filtros</button>
-                  <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Atualizar</button>
-                </div>
-              </div>
-              <div id="giftsFilterInfo" class="small text-muted mt-2"></div>
-
-              <div class="admin-kpi-grid mt-2">
-                <div class="admin-kpi-card">
-                  <div class="admin-kpi-label">Total</div>
-                  <div id="giftStatTotal" class="admin-kpi-value">0</div>
-                </div>
-                <div class="admin-kpi-card">
-                  <div class="admin-kpi-label">Ativos</div>
-                  <div id="giftStatActive" class="admin-kpi-value">0</div>
-                </div>
-                <div class="admin-kpi-card">
-                  <div class="admin-kpi-label">Inativos</div>
-                  <div id="giftStatInactive" class="admin-kpi-value">0</div>
-                </div>
-                <div class="admin-kpi-card">
-                  <div class="admin-kpi-label">Baixo estoque</div>
-                  <div id="giftStatLowStock" class="admin-kpi-value">0</div>
-                </div>
-                <div class="admin-kpi-card">
-                  <div class="admin-kpi-label">Esgotados</div>
-                  <div id="giftStatOut" class="admin-kpi-value">0</div>
-                </div>
-              </div>
-
-              <div class="table-responsive mt-3 gifts-table-responsive">
-                <table class="table table-sm align-middle gifts-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Título</th>
-                      <th>Classificação</th>
-                      <th>Valor</th>
-                      <th>Status</th>
-                      <th>Estoque</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody id="giftsTbody"></tbody>
-                </table>
-              </div>
-
-              <hr />
-
-              <h3 class="h6">Reservas (para correção)</h3>
-              <div class="table-responsive">
-                <table class="table table-sm align-middle">
-                  <thead>
-                    <tr>
-                      <th>Presente</th>
-                      <th>Nome</th>
-                      <th>Qtd</th>
-                      <th>Data</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="resTbody"></tbody>
-                </table>
-              </div>
-
-              <hr />
-
-              <h3 class="h6">Historico de Auditoria</h3>
-              <div class="table-responsive">
-                <table class="table table-sm align-middle">
-                  <thead>
-                    <tr>
-                      <th>Quando</th>
-                      <th>Usuario</th>
-                      <th>Acao</th>
-                      <th>Entidade</th>
-                      <th>Detalhes</th>
-                    </tr>
-                  </thead>
-                  <tbody id="auditTbody"></tbody>
-                </table>
-              </div>
-
-              <div id="resMsg" class="small text-muted"></div>
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h2 class="h6 mb-0">Presentes</h2>
+            <div class="d-flex align-items-center gap-2">
+              <label for="giftCategoryFilter" class="small text-muted mb-0">Categoria</label>
+              <select id="giftCategoryFilter" class="form-select form-select-sm w-auto">
+                <option value="">Todas</option>
+              </select>
+              <input
+                id="giftSearchInput"
+                class="form-control form-control-sm admin-search-input"
+                type="search"
+                placeholder="Buscar por titulo, categoria, id..."
+              />
+              <button id="clearGiftFiltersBtn" class="btn btn-outline-secondary btn-sm">Limpar filtros</button>
+              <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Atualizar</button>
             </div>
           </div>
+          <div id="giftsFilterInfo" class="small text-muted mt-2"></div>
+
+          <div class="admin-kpi-grid mt-2">
+            <div class="admin-kpi-card">
+              <div class="admin-kpi-label">Total</div>
+              <div id="giftStatTotal" class="admin-kpi-value">0</div>
+            </div>
+            <div class="admin-kpi-card">
+              <div class="admin-kpi-label">Ativos</div>
+              <div id="giftStatActive" class="admin-kpi-value">0</div>
+            </div>
+            <div class="admin-kpi-card">
+              <div class="admin-kpi-label">Inativos</div>
+              <div id="giftStatInactive" class="admin-kpi-value">0</div>
+            </div>
+            <div class="admin-kpi-card">
+              <div class="admin-kpi-label">Baixo estoque</div>
+              <div id="giftStatLowStock" class="admin-kpi-value">0</div>
+            </div>
+            <div class="admin-kpi-card">
+              <div class="admin-kpi-label">Esgotados</div>
+              <div id="giftStatOut" class="admin-kpi-value">0</div>
+            </div>
+          </div>
+
+          <div class="table-responsive mt-3 gifts-table-responsive">
+            <table class="table table-sm align-middle gifts-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Título</th>
+                  <th>Classificação</th>
+                  <th>Valor</th>
+                  <th>Status</th>
+                  <th>Estoque</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="giftsTbody"></tbody>
+            </table>
+          </div>
+
+          <hr />
+
+          <h3 class="h6">Reservas (para correção)</h3>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Presente</th>
+                  <th>Nome</th>
+                  <th>Qtd</th>
+                  <th>Data</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="resTbody"></tbody>
+            </table>
+          </div>
+
+          <hr />
+
+          <h3 class="h6">Historico de Auditoria</h3>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>Usuario</th>
+                  <th>Acao</th>
+                  <th>Entidade</th>
+                  <th>Detalhes</th>
+                </tr>
+              </thead>
+              <tbody id="auditTbody"></tbody>
+            </table>
+          </div>
+
+          <div id="resMsg" class="small text-muted"></div>
         </div>
       </div>
     </div>
