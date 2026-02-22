@@ -45,39 +45,40 @@ h1 {
 }
 
 .gifts-table {
-  min-width: 980px;
+  width: 100%;
+  table-layout: fixed;
 }
 
 .gifts-table th,
 .gifts-table td {
   vertical-align: middle;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .gift-title-cell {
-  min-width: 220px;
-  white-space: normal;
-  word-break: break-word;
+  min-width: 0;
 }
 
 .gift-class-cell {
-  min-width: 170px;
-  white-space: normal;
-  word-break: break-word;
+  min-width: 0;
 }
 
 .gift-price-editor {
-  min-width: 170px;
+  min-width: 0;
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .gift-price-editor input {
-  min-width: 90px;
+  min-width: 70px;
+  flex: 1 1 90px;
 }
 
 .gift-actions-cell {
-  width: 90px;
+  width: 76px;
 }
 
 .gift-actions-menu {

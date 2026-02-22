@@ -878,7 +878,7 @@ function renderGiftsTable() {
 
   if (!gifts.length) {
     giftsTbody.innerHTML =
-      '<tr><td colspan="9" class="text-muted small">Nenhum item encontrado com os filtros atuais.</td></tr>';
+      '<tr><td colspan="7" class="text-muted small">Nenhum item encontrado com os filtros atuais.</td></tr>';
     return;
   }
 
@@ -923,9 +923,10 @@ function renderGiftsTable() {
               ? '<span class="badge text-bg-secondary">INATIVO</span>'
               : '<span class="badge text-bg-success">ATIVO</span>'
           }</td>
-          <td>${g.qty_total}</td>
-          <td>${g.qty_reserved}</td>
-          <td>${g.qty_available}</td>
+          <td>
+            <div><strong>${g.qty_available}</strong> disponíveis</div>
+            <div class="small text-muted">${g.qty_reserved} reservado(s) de ${g.qty_total}</div>
+          </td>
           <td class="text-end gift-actions-cell">
             <details class="gift-actions-menu">
               <summary class="btn btn-sm btn-outline-secondary">Ações</summary>
