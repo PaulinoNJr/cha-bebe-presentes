@@ -2,6 +2,8 @@
   --mel-bg: #fff9ef;
   --mel-accent: #f0a500;
   --mel-accent-dark: #c78200;
+  --admin-text: #4c3a18;
+  --admin-muted: #7b5a1e;
 }
 
 body {
@@ -15,8 +17,48 @@ h1 {
   color: #8f5b00;
 }
 
+.admin-page {
+  font-size: 15px;
+  color: var(--admin-text);
+}
+
+.admin-page .card-body {
+  padding: 14px 16px;
+}
+
+.admin-page h2.h6,
+.admin-page h3.h6 {
+  font-size: 0.96rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.admin-page .small {
+  font-size: 0.78rem;
+}
+
 .card {
   border: 1px solid #f4d79e;
+}
+
+.admin-page .btn-sm {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.58rem;
+  line-height: 1.2;
+  border-radius: 0.46rem;
+}
+
+.admin-page .form-control-sm,
+.admin-page .form-select-sm {
+  min-height: 32px;
+  padding-top: 0.27rem;
+  padding-bottom: 0.27rem;
+  font-size: 0.8rem;
+}
+
+.admin-page .form-control-color.form-control-sm {
+  width: 36px;
+  height: 32px;
 }
 
 .btn-primary {
@@ -49,11 +91,63 @@ h1 {
   table-layout: fixed;
 }
 
+.admin-page .table {
+  font-size: 0.82rem;
+}
+
+.admin-page .table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--admin-muted);
+}
+
 .gifts-table th,
 .gifts-table td {
   vertical-align: middle;
   white-space: normal;
   word-break: break-word;
+  padding: 0.46rem 0.5rem;
+}
+
+.gifts-table th:nth-child(1),
+.gifts-table td:nth-child(1) {
+  width: 48px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.gifts-table th:nth-child(2),
+.gifts-table td:nth-child(2) {
+  width: 24%;
+}
+
+.gifts-table th:nth-child(3),
+.gifts-table td:nth-child(3) {
+  width: 14%;
+}
+
+.gifts-table th:nth-child(4),
+.gifts-table td:nth-child(4) {
+  width: 25%;
+}
+
+.gifts-table th:nth-child(5),
+.gifts-table td:nth-child(5) {
+  width: 11%;
+  text-align: center;
+}
+
+.gifts-table th:nth-child(6),
+.gifts-table td:nth-child(6) {
+  width: 16%;
+}
+
+.gifts-table th:nth-child(7),
+.gifts-table td:nth-child(7) {
+  width: 92px;
 }
 
 .gift-title-cell {
@@ -77,8 +171,16 @@ h1 {
   flex: 1 1 90px;
 }
 
+.gift-price-editor .btn {
+  white-space: nowrap;
+}
+
+.gifts-table td:nth-child(6) strong {
+  font-size: 0.9rem;
+}
+
 .gift-actions-cell {
-  width: 76px;
+  width: 92px;
 }
 
 .gift-actions-menu {
@@ -149,7 +251,14 @@ h1 {
 }
 
 .admin-search-input {
-  min-width: 240px;
+  min-width: 220px;
+  max-width: 290px;
+}
+
+.gifts-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 8px;
 }
 
 .admin-kpi-grid {
@@ -219,7 +328,36 @@ h1 {
 }
 
 @media (max-width: 768px) {
+  .admin-page {
+    font-size: 14px;
+  }
+
+  .admin-page .btn-sm {
+    font-size: 0.75rem;
+    padding: 0.27rem 0.5rem;
+  }
+
   .admin-search-input {
+    max-width: none;
     min-width: 100%;
+  }
+
+  .gifts-toolbar {
+    justify-content: flex-start;
+  }
+
+  .gifts-toolbar > label {
+    flex: 0 0 100%;
+  }
+
+  .gifts-toolbar .form-select,
+  .gifts-toolbar .form-control,
+  .gifts-toolbar .btn {
+    width: 100%;
+  }
+
+  .gifts-table th,
+  .gifts-table td {
+    padding: 0.42rem;
   }
 }
