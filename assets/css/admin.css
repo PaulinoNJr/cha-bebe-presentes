@@ -146,3 +146,44 @@ h1 {
   font-size: 14px;
   font-weight: 600;
 }
+
+.product-preview-card {
+  background: #fffef8;
+  border: 1px solid #ecd4a4;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(40, 25, 0, 0.08);
+}
+
+.product-preview-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #fff7e5;
+}
+
+.product-preview-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: none;
+  padding: 10px;
+}
+
+.product-preview-media img.show {
+  display: block;
+}
+
+.product-preview-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8f5b00;
+  font-size: 13px;
+}
+
+.product-preview-body {
+  padding: 12px;
+}

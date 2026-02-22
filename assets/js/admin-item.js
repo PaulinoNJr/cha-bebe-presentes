@@ -33,13 +33,31 @@ const description = document.getElementById("description");
 const image_url = document.getElementById("image_url");
 const buy_url = document.getElementById("buy_url");
 const price_value = document.getElementById("price_value");
-const detectPriceBtn = document.getElementById("detectPriceBtn");
+const price_mode = document.getElementById("price_mode");
+const priceModeHint = document.getElementById("priceModeHint");
 const qty_total = document.getElementById("qty_total");
+const openBuyUrlBtn = document.getElementById("openBuyUrlBtn");
+const titleCounter = document.getElementById("titleCounter");
+const descCounter = document.getElementById("descCounter");
+const previewImage = document.getElementById("previewImage");
+const previewImageFallback = document.getElementById("previewImageFallback");
+const previewClassification = document.getElementById("previewClassification");
+const previewTitle = document.getElementById("previewTitle");
+const previewPrice = document.getElementById("previewPrice");
+const previewQty = document.getElementById("previewQty");
+const previewStatus = document.getElementById("previewStatus");
+const previewLink = document.getElementById("previewLink");
 const saveGiftBtn = document.getElementById("saveGiftBtn");
 const clearBtn = document.getElementById("clearBtn");
 const adminMsg = document.getElementById("adminMsg");
 
 const DRAFT_KEY_NEW = "admin_item_draft_new";
+const OPTIONAL_GIFT_COLS = [
+  "price_manual_override",
+  "price_status",
+  "price_last_error",
+  "price_checked_at",
+];
 
 let classifications = [];
 let pageInitialized = false;
@@ -74,6 +92,120 @@ function isValidHttpUrl(value) {
   } catch {
     return false;
   }
+}
+
+function clearFieldInvalid(field) {
+  if (!field) {
+    return;
+  }
+  field.classList.remove("is-invalid");
+}
+
+function setFieldInvalid(field, message) {
+  if (!field) {
+    return;
+  }
+  field.classList.add("is-invalid");
+  adminMsg.textContent = message;
+}
+
+function clearAllFieldErrors() {
+  [classification_id, title, image_url, buy_url, price_value, qty_total].forEach(clearFieldInvalid);
+}
+
+function toPriceDisplay(num) {
+  if (!Number.isFinite(num) || num <= 0) {
+    return "";
+  }
+  return num.toFixed(2).replace(".", ",");
+}
+
+function updateCounters() {
+  if (titleCounter) {
+    titleCounter.textContent = String((title.value || "").trim().length);
+  }
+  if (descCounter) {
+    descCounter.textContent = String((description.value || "").trim().length);
+  }
+}
+
+function refreshOpenBuyButton() {
+  const url = String(buy_url.value || "").trim();
+  const valid = isValidHttpUrl(url);
+  if (!openBuyUrlBtn) {
+    return;
+  }
+  if (valid) {
+    openBuyUrlBtn.href = url;
+    openBuyUrlBtn.classList.remove("disabled");
+    openBuyUrlBtn.setAttribute("aria-disabled", "false");
+  } else {
+    openBuyUrlBtn.href = "#";
+    openBuyUrlBtn.classList.add("disabled");
+    openBuyUrlBtn.setAttribute("aria-disabled", "true");
+  }
+}
+
+function updateModeUI() {
+  const isManual = String(price_mode.value || "").toLowerCase() === "manual";
+  if (priceModeHint) {
+    priceModeHint.textContent = isManual
+      ? "No modo manual, o valor e obrigatorio e a fila automatica fica desativada."
+      : "No modo automatico, o sistema tenta capturar o preco pelo link ao salvar.";
+  }
+  price_value.placeholder = isManual ? "Ex: 149,90 (obrigatorio)" : "Opcional (captura automatica)";
+}
+
+function refreshImagePreview() {
+  const src = String(image_url.value || "").trim();
+  const valid = isValidHttpUrl(src);
+  if (!previewImage || !previewImageFallback) {
+    return;
+  }
+  if (!valid) {
+    previewImage.removeAttribute("src");
+    previewImage.classList.remove("show");
+    previewImageFallback.classList.remove("d-none");
+    return;
+  }
+  previewImage.src = src;
+  previewImage.classList.add("show");
+  previewImageFallback.classList.add("d-none");
+}
+
+function updatePreview() {
+  const classText = classification_id.options[classification_id.selectedIndex]?.text || "Sem classificacao";
+  const titleText = upper((title.value || "").trim()) || "TITULO DO PRODUTO";
+  const priceNum = parsePriceInput(price_value.value);
+  const qty = Number(qty_total.value || 1);
+  const mode = String(price_mode.value || "auto").toLowerCase() === "manual" ? "Manual" : "Automatico";
+  const link = String(buy_url.value || "").trim();
+  const hasValidLink = isValidHttpUrl(link);
+
+  if (previewClassification) {
+    previewClassification.textContent = classText === "Selecione a classificacao" ? "Sem classificacao" : classText;
+  }
+  if (previewTitle) {
+    previewTitle.textContent = titleText;
+  }
+  if (previewPrice) {
+    previewPrice.textContent =
+      Number.isFinite(priceNum) && priceNum > 0 ? `Preco: ${formatBRL(priceNum)}` : "Preco: -";
+  }
+  if (previewQty) {
+    previewQty.textContent = `Quantidade: ${Number.isInteger(qty) && qty > 0 ? qty : 1}`;
+  }
+  if (previewStatus) {
+    previewStatus.textContent = `Modo preco: ${mode}`;
+  }
+  if (previewLink) {
+    previewLink.textContent = hasValidLink ? `Link: ${link}` : "Link: -";
+    previewLink.title = hasValidLink ? link : "";
+  }
+
+  refreshImagePreview();
+  refreshOpenBuyButton();
+  updateCounters();
 }
 
 function currentEditId() {
@@ -128,9 +260,13 @@ function clearFieldsOnly() {
   image_url.value = "";
   buy_url.value = "";
   price_value.value = "";
+  price_mode.value = "auto";
   qty_total.value = 1;
   formTitle.textContent = "Cadastrar item";
   adminMsg.textContent = "";
+  clearAllFieldErrors();
+  updateModeUI();
+  updatePreview();
 }
 
 function snapshotFormDraft() {
@@ -141,6 +277,7 @@ function snapshotFormDraft() {
     image_url: image_url.value || "",
     buy_url: buy_url.value || "",
     price_value: price_value.value || "",
+    price_mode: price_mode.value || "auto",
     qty_total: qty_total.value || "1",
   };
 }
@@ -159,6 +296,8 @@ function applyDraftToForm(draft) {
   image_url.value = String(draft.image_url ?? "");
   buy_url.value = String(draft.buy_url ?? "");
   price_value.value = String(draft.price_value ?? "");
+  const mode = String(draft.price_mode ?? "auto").toLowerCase();
+  price_mode.value = mode === "manual" ? "manual" : "auto";
 
   const qty = Number(draft.qty_total);
   qty_total.value = Number.isInteger(qty) && qty > 0 ? String(qty) : "1";
@@ -225,11 +364,34 @@ async function loadClassifications(selected = "") {
 }
 
 async function loadGiftForEdit(id) {
-  const { data, error } = await supabase
+  let data = null;
+  let error = null;
+  const withMode = await supabase
     .from("gifts")
-    .select("id,classification_id,title,description,image_url,buy_url,price_value,qty_total")
+    .select("id,classification_id,title,description,image_url,buy_url,price_value,price_manual_override,qty_total")
     .eq("id", id)
     .single();
+
+  if (withMode.error) {
+    const missingModeCol = String(withMode.error?.message || "")
+      .toLowerCase()
+      .includes("price_manual_override");
+    if (!missingModeCol) {
+      throw withMode.error;
+    }
+
+    const fallback = await supabase
+      .from("gifts")
+      .select("id,classification_id,title,description,image_url,buy_url,price_value,qty_total")
+      .eq("id", id)
+      .single();
+    data = fallback.data ? { ...fallback.data, price_manual_override: false } : null;
+    error = fallback.error;
+  } else {
+    data = withMode.data;
+    error = null;
+  }
+
   if (error) {
     throw error;
   }
@@ -243,13 +405,18 @@ async function loadGiftForEdit(id) {
   buy_url.value = data.buy_url ?? "";
   price_value.value =
     data.price_value === null || data.price_value === undefined ? "" : String(data.price_value);
+  price_mode.value = data.price_manual_override === true ? "manual" : "auto";
   qty_total.value = data.qty_total ?? 1;
   formTitle.textContent = `Editar item #${data.id}`;
   adminMsg.textContent = "Modo edicao carregado.";
+  updateModeUI();
+  updatePreview();
 
   const restored = applyDraftToForm(readDraftByKey(draftKeyFor(id)));
   if (restored) {
     adminMsg.textContent = "Rascunho restaurado para este item.";
+    updateModeUI();
+    updatePreview();
   }
 }
 
@@ -262,10 +429,14 @@ async function ensureAdminPermission() {
 }
 
 function watchDraftPersistence() {
-  const fields = [classification_id, title, description, image_url, buy_url, price_value, qty_total];
+  const fields = [classification_id, title, description, image_url, buy_url, price_value, price_mode, qty_total];
   fields.forEach((field) => {
     field.addEventListener("input", saveCurrentDraft);
     field.addEventListener("change", saveCurrentDraft);
+    field.addEventListener("input", () => clearFieldInvalid(field));
+    field.addEventListener("change", () => clearFieldInvalid(field));
+    field.addEventListener("input", updatePreview);
+    field.addEventListener("change", updatePreview);
   });
 }
 
@@ -305,61 +476,102 @@ clearBtn.onclick = async () => {
   }
 };
 
-detectPriceBtn.onclick = async () => {
-  detectPriceBtn.disabled = true;
-  adminMsg.textContent = "Buscando valor no link...";
-  try {
-    const detected = await detectPriceFromUrl(buy_url.value);
-    if (detected === null) {
-      adminMsg.textContent = "Nao foi possivel identificar o valor neste link.";
-    } else {
-      price_value.value = String(detected.toFixed(2));
-      saveCurrentDraft();
-      adminMsg.textContent = `Valor detectado: ${formatBRL(detected)}.`;
+if (openBuyUrlBtn) {
+  openBuyUrlBtn.addEventListener("click", (event) => {
+    if (openBuyUrlBtn.classList.contains("disabled")) {
+      event.preventDefault();
     }
-  } catch (e) {
-    adminMsg.textContent = `Erro ao capturar valor: ${formatError(e)}`;
-  } finally {
-    detectPriceBtn.disabled = false;
-  }
-};
+  });
+}
 
-buy_url.addEventListener("blur", async () => {
-  if (!buy_url.value.trim() || price_value.value.trim()) {
-    return;
-  }
-  try {
-    const detected = await detectPriceFromUrl(buy_url.value);
-    if (detected !== null) {
-      price_value.value = String(detected.toFixed(2));
-      saveCurrentDraft();
-    }
-  } catch {
-    // Falha silenciosa para nao interromper o formulario.
-  }
+if (previewImage) {
+  previewImage.addEventListener("error", () => {
+    previewImage.classList.remove("show");
+    previewImage.removeAttribute("src");
+    previewImageFallback?.classList.remove("d-none");
+  });
+}
+
+title.addEventListener("input", () => {
+  title.value = upper(title.value);
 });
 
+price_mode.addEventListener("change", () => {
+  clearFieldInvalid(price_value);
+  updateModeUI();
+  updatePreview();
+});
+
+price_value.addEventListener("blur", () => {
+  const parsed = parsePriceInput(price_value.value);
+  if (parsed !== null && parsed > 0) {
+    price_value.value = toPriceDisplay(parsed);
+  }
+  updatePreview();
+});
+
+async function clearPendingPriceQueueByGift(giftId) {
+  const { error } = await supabase
+    .from("price_update_queue")
+    .delete()
+    .eq("gift_id", giftId)
+    .in("status", ["pending", "processing"]);
+
+  if (error) {
+    const msg = String(error?.message || "").toLowerCase();
+    if (msg.includes("price_update_queue") || msg.includes("does not exist")) {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function saveGiftWithFallback(isEditing, editingId, payload) {
+  let nextPayload = { ...payload };
+  let lastError = null;
+
+  for (let i = 0; i < 5; i += 1) {
+    const req = isEditing
+      ? supabase.from("gifts").update(nextPayload).eq("id", editingId)
+      : supabase.from("gifts").insert(nextPayload);
+    const { error } = await req;
+    if (!error) {
+      return;
+    }
+
+    lastError = error;
+    const msg = String(error?.message || "").toLowerCase();
+    let removedAny = false;
+    OPTIONAL_GIFT_COLS.forEach((col) => {
+      if (Object.prototype.hasOwnProperty.call(nextPayload, col) && msg.includes(col)) {
+        delete nextPayload[col];
+        removedAny = true;
+      }
+    });
+
+    if (!removedAny || !Object.keys(nextPayload).length) {
+      throw error;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+}
+
 saveGiftBtn.onclick = async () => {
+  clearAllFieldErrors();
   saveGiftBtn.disabled = true;
+  const originalSaveText = saveGiftBtn.textContent;
+  saveGiftBtn.textContent = "Salvando...";
   adminMsg.textContent = "Salvando...";
 
   const isEditing = !!giftId.value;
   const editingId = isEditing ? Number(giftId.value) : null;
   const classIdNum = Number(classification_id.value);
+  const mode = String(price_mode.value || "auto").toLowerCase() === "manual" ? "manual" : "auto";
   let priceNum = parsePriceInput(price_value.value);
-
-  try {
-    if (buy_url.value.trim()) {
-      adminMsg.textContent = "Capturando valor pelo link...";
-      const detected = await detectPriceFromUrl(buy_url.value);
-      if (detected !== null) {
-        priceNum = detected;
-        price_value.value = String(priceNum.toFixed(2));
-      }
-    }
-  } catch {
-    // Falha de rede/proxy; validacao abaixo decide se pode salvar.
-  }
+  let detectedPrice = null;
 
   const classificationId = Number.isInteger(classIdNum) && classIdNum > 0 ? classIdNum : null;
   const titleValue = upper(title.value);
@@ -367,35 +579,54 @@ saveGiftBtn.onclick = async () => {
   const imageUrlValue = image_url.value.trim();
   const buyUrlValue = buy_url.value.trim();
   const qtyTotalValue = Number(qty_total.value || 1);
+  const nowIso = new Date().toISOString();
 
   if (!classificationId) {
-    adminMsg.textContent = "Selecione uma classificacao.";
+    setFieldInvalid(classification_id, "Selecione uma classificacao.");
     saveGiftBtn.disabled = false;
+    saveGiftBtn.textContent = originalSaveText || "Salvar item";
     return;
   }
-  if (!titleValue) {
-    adminMsg.textContent = "Informe o titulo.";
+  if (!titleValue || titleValue.length < 2) {
+    setFieldInvalid(title, "Informe o titulo com pelo menos 2 caracteres.");
     saveGiftBtn.disabled = false;
+    saveGiftBtn.textContent = originalSaveText || "Salvar item";
     return;
   }
   if (!imageUrlValue || !isValidHttpUrl(imageUrlValue)) {
-    adminMsg.textContent = "URL da imagem invalida. Use http(s)://...";
+    setFieldInvalid(image_url, "URL da imagem invalida. Use http(s)://...");
     saveGiftBtn.disabled = false;
+    saveGiftBtn.textContent = originalSaveText || "Salvar item";
     return;
   }
   if (!buyUrlValue || !isValidHttpUrl(buyUrlValue)) {
-    adminMsg.textContent = "Link de compra invalido. Use http(s)://...";
+    setFieldInvalid(buy_url, "Link de compra invalido. Use http(s)://...");
     saveGiftBtn.disabled = false;
-    return;
-  }
-  if (priceNum === null) {
-    adminMsg.textContent = "Informe o valor do item.";
-    saveGiftBtn.disabled = false;
+    saveGiftBtn.textContent = originalSaveText || "Salvar item";
     return;
   }
   if (!Number.isInteger(qtyTotalValue) || qtyTotalValue < 1) {
-    adminMsg.textContent = "Quantidade total invalida.";
+    setFieldInvalid(qty_total, "Quantidade total invalida.");
     saveGiftBtn.disabled = false;
+    saveGiftBtn.textContent = originalSaveText || "Salvar item";
+    return;
+  }
+
+  if (mode === "auto") {
+    try {
+      adminMsg.textContent = "Capturando valor automaticamente pelo link...";
+      detectedPrice = await detectPriceFromUrl(buyUrlValue);
+      if (detectedPrice !== null) {
+        priceNum = detectedPrice;
+        price_value.value = String(priceNum.toFixed(2));
+      }
+    } catch {
+      // Se falhar a captura automatica, salva como pendente.
+    }
+  } else if (priceNum === null || priceNum <= 0) {
+    setFieldInvalid(price_value, "No modo manual, informe um valor maior que zero.");
+    saveGiftBtn.disabled = false;
+    saveGiftBtn.textContent = originalSaveText || "Salvar item";
     return;
   }
 
@@ -405,15 +636,19 @@ saveGiftBtn.onclick = async () => {
     description: descriptionValue,
     image_url: imageUrlValue,
     buy_url: buyUrlValue,
-    price_value: priceNum,
     qty_total: qtyTotalValue,
+    price_manual_override: mode === "manual",
+    price_status: mode === "manual" ? "manual" : priceNum !== null && priceNum > 0 ? "ok" : "pending",
+    price_last_error: null,
+    price_checked_at: mode === "manual" ? nowIso : priceNum !== null && priceNum > 0 ? nowIso : null,
+    price_value: priceNum === null ? null : priceNum,
   };
 
   try {
     if (isEditing && editingId) {
-      const { error } = await supabase.from("gifts").update(payload).eq("id", editingId);
-      if (error) {
-        throw error;
+      await saveGiftWithFallback(true, editingId, payload);
+      if (mode === "manual") {
+        await clearPendingPriceQueueByGift(editingId);
       }
 
       removeDraftByKey(draftKeyFor(editingId));
@@ -421,22 +656,31 @@ saveGiftBtn.onclick = async () => {
       clearFieldsOnly();
       resetUrlToCreateMode();
       await loadClassifications("");
-      adminMsg.textContent = "Item atualizado. Formulario limpo.";
+      adminMsg.textContent =
+        mode === "manual"
+          ? `Item atualizado com preco manual (${formatBRL(priceNum)}).`
+          : detectedPrice !== null
+          ? `Item atualizado com captura automatica (${formatBRL(detectedPrice)}).`
+          : "Item atualizado em modo automatico (preco pendente de captura).";
     } else {
-      const { error } = await supabase.from("gifts").insert(payload);
-      if (error) {
-        throw error;
-      }
+      await saveGiftWithFallback(false, null, payload);
 
       clearDraftForCurrentContext();
       clearFieldsOnly();
       await loadClassifications("");
-      adminMsg.textContent = "Item criado. Formulario limpo para o proximo cadastro.";
+      adminMsg.textContent =
+        mode === "manual"
+          ? `Item criado com preco manual (${formatBRL(priceNum)}).`
+          : detectedPrice !== null
+          ? `Item criado com captura automatica (${formatBRL(detectedPrice)}).`
+          : "Item criado em modo automatico (preco pendente de captura).";
     }
   } catch (e) {
     adminMsg.textContent = `Erro ao salvar: ${formatError(e)}`;
   } finally {
     saveGiftBtn.disabled = false;
+    saveGiftBtn.textContent = originalSaveText || "Salvar item";
+    updatePreview();
   }
 };
 
@@ -452,6 +696,8 @@ async function loadPageForSession() {
   const restored = applyDraftToForm(readDraftByKey(DRAFT_KEY_NEW));
   if (restored) {
     adminMsg.textContent = "Rascunho restaurado.";
+    updateModeUI();
+    updatePreview();
   }
 }
 

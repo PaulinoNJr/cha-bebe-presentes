@@ -45,51 +45,85 @@
             <h2 class="h6 mb-0" id="formTitle">Cadastrar item</h2>
             <button id="clearBtn" class="btn btn-outline-secondary btn-sm" type="button">Limpar</button>
           </div>
+          <p class="small text-muted mb-3">
+            Preencha os dados e acompanhe a pré-visualização ao lado antes de salvar.
+          </p>
 
           <input type="hidden" id="giftId" />
 
-          <div class="mb-2">
-            <label class="form-label">Classificação</label>
-            <select id="classification_id" class="form-select" required>
-              <option value="">Selecione a classificação</option>
-            </select>
-          </div>
+          <div class="row g-3">
+            <div class="col-lg-7">
+              <div class="mb-2">
+                <label class="form-label">Classificação</label>
+                <select id="classification_id" class="form-select" required>
+                  <option value="">Selecione a classificação</option>
+                </select>
+              </div>
 
-          <div class="mb-2">
-            <label class="form-label">Título</label>
-            <input id="title" class="form-control text-uppercase" placeholder="Ex: FRALDA P" required />
-          </div>
+              <div class="mb-2">
+                <label class="form-label">Título</label>
+                <input id="title" class="form-control text-uppercase" placeholder="Ex: FRALDA P" required maxlength="120" />
+                <div class="form-text"><span id="titleCounter">0</span>/120</div>
+              </div>
 
-          <div class="mb-2">
-            <label class="form-label">Descrição</label>
-            <textarea id="description" class="form-control" rows="2"></textarea>
-          </div>
+              <div class="mb-2">
+                <label class="form-label">Descrição</label>
+                <textarea id="description" class="form-control" rows="3" maxlength="500"></textarea>
+                <div class="form-text"><span id="descCounter">0</span>/500</div>
+              </div>
 
-          <div class="mb-2">
-            <label class="form-label">Imagem (URL)</label>
-            <input id="image_url" class="form-control" placeholder="https://..." required />
-          </div>
+              <div class="mb-2">
+                <label class="form-label">Imagem (URL)</label>
+                <input id="image_url" class="form-control" placeholder="https://..." required />
+              </div>
 
-          <div class="mb-2">
-            <label class="form-label">Link compra (URL)</label>
-            <input id="buy_url" class="form-control" placeholder="https://..." required />
-          </div>
+              <div class="mb-2">
+                <label class="form-label">Link compra (URL)</label>
+                <div class="input-group">
+                  <input id="buy_url" class="form-control" placeholder="https://..." required />
+                  <a id="openBuyUrlBtn" class="btn btn-outline-secondary disabled" href="#" target="_blank" rel="noopener noreferrer">Abrir</a>
+                </div>
+              </div>
 
-          <div class="mb-2">
-            <label class="form-label">Valor (R$)</label>
-            <div class="input-group">
-              <input id="price_value" class="form-control" placeholder="Auto pelo link (editável)" required />
-              <button id="detectPriceBtn" class="btn btn-outline-secondary" type="button">Capturar valor</button>
+              <div class="mb-2">
+                <label class="form-label">Atualização de preço</label>
+                <select id="price_mode" class="form-select">
+                  <option value="auto">Automático (captura ao salvar e segue fila)</option>
+                  <option value="manual">Manual (fixo, sem atualização automática)</option>
+                </select>
+                <div id="priceModeHint" class="form-text">Escolha como esse item deve atualizar o preço após salvar.</div>
+              </div>
+
+              <div class="mb-2">
+                <label class="form-label">Valor (R$)</label>
+                <input id="price_value" class="form-control" placeholder="Ex: 149,90" inputmode="decimal" />
+              </div>
+
+              <div class="mb-2">
+                <label class="form-label">Quantidade total</label>
+                <input id="qty_total" class="form-control" type="number" min="1" value="1" required />
+              </div>
             </div>
-            <div class="form-text">Ao informar link de compra, tente capturar o valor.</div>
+
+            <div class="col-lg-5">
+              <div class="product-preview-card">
+                <div class="product-preview-media">
+                  <img id="previewImage" alt="Pré-visualização do produto" />
+                  <div id="previewImageFallback" class="product-preview-fallback">Sem imagem</div>
+                </div>
+                <div class="product-preview-body">
+                  <div id="previewClassification" class="small text-muted">Sem classificação</div>
+                  <h3 id="previewTitle" class="h6 mb-1">TÍTULO DO PRODUTO</h3>
+                  <div id="previewPrice" class="fw-semibold small">Preço: -</div>
+                  <div id="previewQty" class="small text-muted">Quantidade: 1</div>
+                  <div id="previewStatus" class="small mt-2">Modo preço: Automático</div>
+                  <div id="previewLink" class="small text-truncate mt-2 text-muted">Link: -</div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="mb-2">
-            <label class="form-label">Quantidade total</label>
-            <input id="qty_total" class="form-control" type="number" min="1" value="1" required />
-          </div>
-
-          <div class="d-flex gap-2 mt-2">
+          <div class="d-flex gap-2 mt-3">
             <button id="saveGiftBtn" class="btn btn-primary" type="button">Salvar item</button>
             <a href="./admin.html" class="btn btn-outline-secondary">Voltar</a>
           </div>
