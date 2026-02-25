@@ -45,6 +45,10 @@ let gifts = [];
 let reservations = [];
 let currentGift = null;
 let canRefreshPrices = false;
+let autoRefreshTimer = null;
+let lastUserInteractionAt = Date.now();
+let lastSuccessfulLoadAt = 0;
+let isLoadInFlight = false;
 
 function setAdminRefreshVisibility(show) {
   if (adminRefreshPricesBtn) {
@@ -466,58 +470,93 @@ function renderGrid() {
   });
 }
 
-async function loadAll() {
-  status.className = "alert alert-secondary py-2 small";
-  status.textContent = "Carregando...";
-  renderLoadingSkeleton(6);
+function markUserInteraction() {
+  lastUserInteractionAt = Date.now();
+}
 
-  const siteContent = await sbFetch("/rest/v1/site_content?select=instructions_html&id=eq.1&limit=1");
+function canAutoRefreshNow() {
+  if (document.hidden) {
+    return false;
+  }
+  if (modalEl?.classList.contains("show")) {
+    return false;
+  }
+  // Evita interromper durante navegacao/uso ativo.
+  if (Date.now() - lastUserInteractionAt < 15000) {
+    return false;
+  }
+  return true;
+}
 
-  try {
-    const orderedClassifications = await sbFetch(
-      "/rest/v1/gift_classifications?select=id,name,display_order&order=display_order.asc,name.asc"
-    );
-    classifications = (orderedClassifications ?? []).map((c) => ({
-      ...c,
-      display_order: c.display_order ?? 0,
-    }));
-  } catch (e) {
-    const emsg = String(e?.message || "").toLowerCase();
-    if (!emsg.includes("display_order")) {
-      throw e;
-    }
-    classifications = await sbFetch("/rest/v1/gift_classifications?select=id,name&order=name.asc");
+async function loadAll({ silent = false } = {}) {
+  if (isLoadInFlight) {
+    return;
+  }
+  isLoadInFlight = true;
+
+  if (!silent) {
+    status.className = "alert alert-secondary py-2 small";
+    status.textContent = "Carregando...";
+    renderLoadingSkeleton(6);
   }
 
-  let giftsData = [];
   try {
-    giftsData = await sbFetch(
-      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available&is_active=eq.true&order=classification_display_order.asc,classification_name.asc,id.asc"
-    );
-  } catch (e) {
-    const emsg = String(e?.message || "").toLowerCase();
-    const maybeMissingColumn =
-      emsg.includes("is_active") || emsg.includes("classification_display_order");
-    if (!maybeMissingColumn) {
-      throw e;
-    }
-    giftsData = await sbFetch(
-      "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=classification_name.asc,id.asc"
-    );
-  }
-  gifts = (giftsData ?? [])
-    .map((g) => ({
-      ...g,
-      classification_display_order: g.classification_display_order ?? 0,
-    }))
-    .filter((g) => g.is_active !== false);
-  reservations = await sbFetch(
-    "/rest/v1/gift_reservations?select=id,gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc"
-  );
+    const siteContent = await sbFetch("/rest/v1/site_content?select=instructions_html&id=eq.1&limit=1");
 
-  renderInstructions(siteContent?.[0] || null);
-  renderFilterOptions();
-  renderGrid();
+    try {
+      const orderedClassifications = await sbFetch(
+        "/rest/v1/gift_classifications?select=id,name,display_order&order=display_order.asc,name.asc"
+      );
+      classifications = (orderedClassifications ?? []).map((c) => ({
+        ...c,
+        display_order: c.display_order ?? 0,
+      }));
+    } catch (e) {
+      const emsg = String(e?.message || "").toLowerCase();
+      if (!emsg.includes("display_order")) {
+        throw e;
+      }
+      classifications = await sbFetch("/rest/v1/gift_classifications?select=id,name&order=name.asc");
+    }
+
+    let giftsData = [];
+    try {
+      giftsData = await sbFetch(
+        "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,is_active,classification_display_order,classification_id,classification_name,qty_total,qty_reserved,qty_available&is_active=eq.true&order=classification_display_order.asc,classification_name.asc,id.asc"
+      );
+    } catch (e) {
+      const emsg = String(e?.message || "").toLowerCase();
+      const maybeMissingColumn =
+        emsg.includes("is_active") || emsg.includes("classification_display_order");
+      if (!maybeMissingColumn) {
+        throw e;
+      }
+      giftsData = await sbFetch(
+        "/rest/v1/gifts_view?select=id,title,description,image_url,buy_url,price_value,classification_id,classification_name,qty_total,qty_reserved,qty_available&order=classification_name.asc,id.asc"
+      );
+    }
+    gifts = (giftsData ?? [])
+      .map((g) => ({
+        ...g,
+        classification_display_order: g.classification_display_order ?? 0,
+      }))
+      .filter((g) => g.is_active !== false);
+    reservations = await sbFetch(
+      "/rest/v1/gift_reservations?select=id,gift_id,reserved_by,qty,reserved_at&order=reserved_at.desc"
+    );
+
+    renderInstructions(siteContent?.[0] || null);
+    renderFilterOptions();
+    renderGrid();
+    lastSuccessfulLoadAt = Date.now();
+  } catch (e) {
+    if (!silent) {
+      status.className = "alert alert-danger py-2 small";
+      status.textContent = `Erro ao carregar dados: ${String(e?.message || e || "Erro inesperado")}`;
+    }
+  } finally {
+    isLoadInFlight = false;
+  }
 }
 
 function openReserveModal(gift) {
@@ -630,35 +669,38 @@ if (cpfInput) {
 if (adminRefreshPricesBtn) {
   adminRefreshPricesBtn.addEventListener("click", refreshPricesAsAdmin);
 }
+
+["scroll", "pointerdown", "keydown", "touchstart"].forEach((eventName) => {
+  window.addEventListener(eventName, markUserInteraction, { passive: true });
+});
+
 supabase.auth.onAuthStateChange(() => {
   setTimeout(() => {
     checkIndexAdminAccess();
   }, 0);
 });
 
-let autoRefreshTimer = null;
-
 function startAutoRefresh() {
   if (autoRefreshTimer) {
     clearInterval(autoRefreshTimer);
   }
   autoRefreshTimer = setInterval(() => {
-    if (document.hidden) {
+    if (!canAutoRefreshNow()) {
       return;
     }
-    if (modalEl?.classList.contains("show")) {
-      return;
-    }
-    loadAll();
-  }, 60000);
+    loadAll({ silent: true });
+  }, 180000);
 }
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
-    loadAll();
+    // Evita refresh redundante ao alternar abas rapidamente.
+    if (Date.now() - lastSuccessfulLoadAt > 30000 && canAutoRefreshNow()) {
+      loadAll({ silent: true });
+    }
   }
 });
 
 checkIndexAdminAccess();
 startAutoRefresh();
-loadAll();
+loadAll({ silent: false });
