@@ -342,6 +342,7 @@ function giftCard(g) {
   const isFull = g.qty_available <= 0;
   const hasPrice = !(g.price_value === null || g.price_value === undefined || g.price_value === "");
   const priceLabel = hasPrice ? `Por ${formatBRL(g.price_value)}` : formatBRL(g.price_value);
+  const hasBuyUrl = String(g.buy_url || "").trim().length > 0;
 
   const img = g.image_url
     ? `<img src="${esc(g.image_url)}" class="card-img-top gift-img" alt="${esc(g.title)}">`
@@ -363,6 +364,19 @@ function giftCard(g) {
             <li class="list-group-item d-flex justify-content-between align-items-center">
               <span>${esc(x.reserved_by)}</span>
               <span class="d-flex align-items-center gap-2">
+                ${
+                  hasBuyUrl
+                    ? `
+                <a
+                  class="btn btn-sm btn-outline-primary py-0 px-2"
+                  href="${esc(g.buy_url)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Abrir link de compra"
+                  aria-label="Abrir link de compra"
+                ><span aria-hidden="true">&#128279;</span></a>`
+                    : ""
+                }
                 <span class="badge text-bg-light">x${x.qty}</span>
                 <button
                   type="button"
